@@ -214,6 +214,53 @@
     </div>
 </div>
 
+<!-- 免责声明 -->
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="card border-warning shadow">
+            <div class="card-header bg-warning text-dark py-3">
+                <h6 class="m-0 font-weight-bold">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    ⚠️ 重要免责声明
+                </h6>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-warning mb-3" role="alert">
+                    <strong>使用风险提醒：</strong>
+                    本工具可能被识别为异常行为，存在账号限制或封禁风险，请谨慎使用！
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-book"></i> 使用条款</h6>
+                        <ul class="small text-muted">
+                            <li>仅供学习研究和个人使用</li>
+                            <li>严禁用于商业用途</li>
+                            <li>必须遵守相关法律法规</li>
+                            <li>必须遵守哔哩哔哩服务条款</li>
+                        </ul>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="bi bi-shield-exclamation"></i> 风险提示</h6>
+                        <ul class="small text-muted">
+                            <li>账号可能被限制功能</li>
+                            <li>账号可能被暂时封禁</li>
+                            <li>数据安全请自行保障</li>
+                            <li>一切后果由用户自行承担</li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="text-center mt-3">
+                    <button class="btn btn-sm btn-outline-dark" data-bs-toggle="modal"
+                        data-bs-target="#disclaimerModal">
+                        <i class="bi bi-file-text"></i>
+                        查看完整免责声明
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- 同步进度模态框 -->
 <div class="modal fade" id="syncModal" tabindex="-1">
     <div class="modal-dialog">
@@ -233,6 +280,100 @@
                         <div id="sync-progress" class="progress-bar" role="progressbar" style="width: 0%"></div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 免责声明详情模态框 -->
+<div class="modal fade" id="disclaimerModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-warning text-dark">
+                <h5 class="modal-title">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    免责声明
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div class="alert alert-danger">
+                    <strong>⚠️ 重要提醒：使用本工具即表示您已理解并同意以下所有条款！</strong>
+                </div>
+
+                <h6><i class="bi bi-target"></i> 使用目的和范围</h6>
+                <ul class="mb-3">
+                    <li>本工具仅供<strong>学习研究</strong>和<strong>个人使用</strong>，严禁用于商业用途</li>
+                    <li>本工具旨在帮助用户更好地管理个人关注列表，提升使用体验</li>
+                    <li>用户应当合理使用本工具，避免对哔哩哔哩服务器造成过度负担</li>
+                </ul>
+
+                <h6><i class="bi bi-gavel"></i> 法律合规性</h6>
+                <ul class="mb-3">
+                    <li>用户使用本工具必须严格遵守《中华人民共和国网络安全法》等相关法律法规</li>
+                    <li>用户必须遵守哔哩哔哩的<strong>用户协议</strong>和<strong>服务条款</strong></li>
+                    <li>严禁利用本工具进行任何违法违规活动</li>
+                </ul>
+
+                <h6><i class="bi bi-shield-lock"></i> 数据安全和隐私</h6>
+                <ul class="mb-3">
+                    <li>本工具仅在用户本地设备上运行，不会上传用户数据到任何第三方服务器</li>
+                    <li>用户的Cookie和个人信息仅存储在本地，请妥善保管相关配置文件</li>
+                    <li>建议定期更换Cookie，避免账号安全风险</li>
+                </ul>
+
+                <h6><i class="bi bi-exclamation-diamond"></i> 使用风险</h6>
+                <div class="alert alert-warning">
+                    <p><strong>使用本工具存在被哔哩哔哩识别为异常行为的风险，可能导致：</strong></p>
+                    <ul class="mb-0">
+                        <li>账号被限制功能</li>
+                        <li>账号被暂时封禁</li>
+                        <li>其他未知风险</li>
+                    </ul>
+                </div>
+                <p class="mb-3">用户应当控制使用频率，建议在API调用间设置合理延迟</p>
+
+                <h6><i class="bi bi-gear"></i> 技术限制</h6>
+                <ul class="mb-3">
+                    <li>本工具的功能依赖于哔哩哔哩的API接口，若接口发生变化可能导致功能失效</li>
+                    <li>本工具无法保证在所有环境下的稳定性和兼容性</li>
+                    <li>开发者不承诺提供持续的技术支持和更新维护</li>
+                </ul>
+
+                <h6><i class="bi bi-shield-x"></i> 责任限制</h6>
+                <div class="alert alert-danger">
+                    <ul class="mb-0">
+                        <li>使用本工具所产生的<strong>一切后果</strong>（包括但不限于账号风险、数据丢失、法律责任等）<strong>完全由用户自行承担</strong></li>
+                        <li>开发者不对因使用本工具而造成的任何直接或间接损失承担责任</li>
+                        <li>开发者不对工具的准确性、可靠性、安全性提供任何明示或暗示的保证</li>
+                    </ul>
+                </div>
+
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle"></i> 其他条款</h6>
+                    <ul class="mb-0">
+                        <li>本免责声明可能会不定期更新，请用户关注最新版本</li>
+                        <li>如果您不同意以上任何条款，请立即停止使用本工具</li>
+                        <li>继续使用本工具即视为您已完全理解并接受本免责声明</li>
+                    </ul>
+                </div>
+
+                <div class="text-center mt-4">
+                    <h5 class="text-danger">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <strong>再次提醒：请理性使用，风险自担！</strong>
+                    </h5>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="bi bi-x-circle"></i>
+                    我已了解
+                </button>
+                <button type="button" class="btn btn-warning" data-bs-dismiss="modal">
+                    <i class="bi bi-check-circle"></i>
+                    我同意并继续使用
+                </button>
             </div>
         </div>
     </div>

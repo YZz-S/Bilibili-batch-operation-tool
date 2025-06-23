@@ -6,6 +6,11 @@ Bilibili Following List Batch Management Tool - Main Entry Point
 作者: Bilibili Batch Operation Tool Team
 版本: 1.0.0
 许可证: Apache 2.0
+
+⚠️ 免责声明: 
+本工具仅供学习研究使用，使用存在账号风险！
+详细免责声明请查看 DISCLAIMER.md 文件
+使用本工具即表示您同意承担所有风险！
 """
 
 import uvicorn

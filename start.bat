@@ -5,6 +5,19 @@ echo 哔哩哔哩关注列表批量管理工具
 echo Bilibili Following List Batch Management Tool
 echo ========================================
 echo.
+echo [免责声明] 本工具仅供学习研究使用，存在账号风险！
+echo [风险提示] 使用本工具可能导致账号被限制或封禁！
+echo [重要提醒] 继续使用即表示您同意承担所有风险！
+echo.
+echo 详细免责声明请查看: DISCLAIMER.md
+echo.
+set /p "confirm=是否同意免责声明并继续使用？(输入 y 继续, 其他键退出): "
+if /i not "%confirm%"=="y" (
+    echo 已取消启动。
+    pause
+    exit /b 0
+)
+echo.
 
 REM 检查Python是否安装
 python --version >nul 2>&1
