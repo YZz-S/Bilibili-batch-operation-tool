@@ -648,6 +648,633 @@ async function batchUnfollowInactive() {
     showMessage('批量操作功能开发中...', 'info');
 }
 
+/**
+ * 一键更新所有信息
+ */
+async function oneClickUpdate() {
+    if (!isOnline) {
+        showMessage('请先在设置页面配置哔哩哔哩Cookie', 'warning');
+        return;
+    }
+
+    // 显示确认对话框
+    const confirmModal = `
+        <div class="modal fade" id="oneClickUpdateModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-rocket-takeoff text-primary"></i>
+                            一键更新所有信息
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            此功能将自动执行以下操作：
+                        </div>
+                        <ul class="list-group list-group-flush">
+                            <li class="list-group-item d-flex align-items-center">
+                                <i class="bi bi-people text-primary me-2"></i>
+                                <div>
+                                    <strong>同步关注列表</strong>
+                                    <small class="text-muted d-block">更新<strong class="text-primary">所有</strong>关注用户信息</small>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex align-items-center">
+                                <i class="bi bi-collection text-success me-2"></i>
+                                <div>
+                                    <strong>更新分组信息</strong>
+                                    <small class="text-muted d-block">同步最新的关注分组结构</small>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex align-items-center">
+                                <i class="bi bi-graph-up text-info me-2"></i>
+                                <div>
+                                    <strong>同步用户统计</strong>
+                                    <small class="text-muted d-block">获取<strong class="text-info">所有</strong>用户粉丝数、视频数等最新数据</small>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex align-items-center">
+                                <i class="bi bi-trophy text-warning me-2"></i>
+                                <div>
+                                    <strong>修复等级信息</strong>
+                                    <small class="text-muted d-block">更新<strong class="text-warning">所有</strong>等级为0的用户信息</small>
+                                </div>
+                            </li>
+                            <li class="list-group-item d-flex align-items-center">
+                                <i class="bi bi-tags text-secondary me-2"></i>
+                                <div>
+                                    <strong>智能分类</strong>
+                                    <small class="text-muted d-block">自动为未分类用户分配合适的类别</small>
+                                </div>
+                            </li>
+                        </ul>
+                        <div class="alert alert-warning mt-3">
+                            <i class="bi bi-exclamation-triangle"></i>
+                            <strong>重要提醒：</strong>
+                            <ul class="mb-0 mt-2">
+                                <li>本次将同步<strong>全部</strong>用户，可能需要很长时间（1-3小时）</li>
+                                <li>已增加API延迟间隔以降低封号风险</li>
+                                <li>建议在网络稳定且空闲时执行</li>
+                                <li>过程中请保持页面开启，勿关闭浏览器</li>
+                                <li>执行过程会有详细的日志记录</li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary" onclick="startOneClickUpdate()">
+                            <i class="bi bi-rocket-takeoff"></i>
+                            开始更新
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // 移除已存在的模态框
+    const existingModal = document.getElementById('oneClickUpdateModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+
+    // 添加模态框到页面
+    document.body.insertAdjacentHTML('beforeend', confirmModal);
+
+    // 显示模态框
+    const modal = new bootstrap.Modal(document.getElementById('oneClickUpdateModal'));
+    modal.show();
+}
+
+/**
+ * 开始一键更新
+ */
+async function startOneClickUpdate() {
+    try {
+        // 关闭确认对话框
+        const confirmModal = bootstrap.Modal.getInstance(document.getElementById('oneClickUpdateModal'));
+        confirmModal.hide();
+
+        // 显示全屏进度界面
+        showFullScreenProgress();
+
+        // 开始更新
+        const response = await fetch('/api/bilibili/one-click-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.task_id) {
+            showMessage('一键更新任务已启动，正在全力同步...', 'success');
+
+            // 开始轮询获取真实进度
+            window.updateTaskId = result.task_id;
+            startProgressPolling(result.task_id);
+        } else {
+            throw new Error(result.detail || '启动更新任务失败');
+        }
+
+    } catch (error) {
+        console.error('一键更新失败:', error);
+        showMessage('一键更新失败: ' + error.message, 'danger');
+        hideFullScreenProgress();
+    }
+}
+
+/**
+ * 显示全屏进度界面
+ */
+function showFullScreenProgress() {
+    const fullScreenProgress = `
+        <div id="fullScreenProgress" class="position-fixed top-0 start-0 w-100 h-100" 
+             style="background: rgba(0,0,0,0.95); z-index: 9999; backdrop-filter: blur(5px);">
+            <div class="container-fluid h-100 d-flex flex-column">
+                <!-- 顶部标题栏 -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="text-center text-white pt-4 pb-3">
+                            <h2 class="mb-2">
+                                <i class="bi bi-rocket-takeoff text-warning me-2"></i>
+                                一键更新进行中
+                            </h2>
+                            <p class="text-light mb-0">正在全力同步您的哔哩哔哩数据，请耐心等待...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 主要进度区域 -->
+                <div class="row flex-grow-1">
+                    <!-- 左侧步骤进度 -->
+                    <div class="col-lg-4">
+                        <div class="card bg-dark border-secondary h-100">
+                            <div class="card-header bg-dark border-secondary">
+                                <h5 class="text-white mb-0">
+                                    <i class="bi bi-list-check me-2"></i>
+                                    执行步骤
+                                </h5>
+                            </div>
+                            <div class="card-body">
+                                <!-- 总体进度 -->
+                                <div class="mb-4">
+                                    <div class="d-flex justify-content-between text-light mb-2">
+                                        <span>总体进度</span>
+                                        <span id="overallProgressText">0%</span>
+                                    </div>
+                                    <div class="progress" style="height: 12px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
+                                             id="overallProgressBar" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- 步骤列表 -->
+                                <div class="step-list">
+                                    <div class="step-item mb-3" id="step-following">
+                                        <div class="d-flex align-items-center">
+                                            <div class="step-icon me-3">
+                                                <div class="spinner-border spinner-border-sm text-primary" id="spinner-following"></div>
+                                                <i class="bi bi-check-circle text-success d-none" id="check-following"></i>
+                                                <i class="bi bi-x-circle text-danger d-none" id="error-following"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div class="fw-bold text-white">关注列表同步</div>
+                                                <small class="text-muted" id="status-following">准备中...</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="step-item mb-3" id="step-groups">
+                                        <div class="d-flex align-items-center">
+                                            <div class="step-icon me-3">
+                                                <div class="spinner-border spinner-border-sm text-secondary d-none" id="spinner-groups"></div>
+                                                <i class="bi bi-check-circle text-success d-none" id="check-groups"></i>
+                                                <i class="bi bi-x-circle text-danger d-none" id="error-groups"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div class="fw-bold text-light">分组信息同步</div>
+                                                <small class="text-muted" id="status-groups">等待中...</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="step-item mb-3" id="step-stats">
+                                        <div class="d-flex align-items-center">
+                                            <div class="step-icon me-3">
+                                                <div class="spinner-border spinner-border-sm text-secondary d-none" id="spinner-stats"></div>
+                                                <i class="bi bi-check-circle text-success d-none" id="check-stats"></i>
+                                                <i class="bi bi-x-circle text-danger d-none" id="error-stats"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div class="fw-bold text-light">用户统计同步</div>
+                                                <small class="text-muted" id="status-stats">等待中...</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="step-item mb-3" id="step-levels">
+                                        <div class="d-flex align-items-center">
+                                            <div class="step-icon me-3">
+                                                <div class="spinner-border spinner-border-sm text-secondary d-none" id="spinner-levels"></div>
+                                                <i class="bi bi-check-circle text-success d-none" id="check-levels"></i>
+                                                <i class="bi bi-x-circle text-danger d-none" id="error-levels"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div class="fw-bold text-light">等级信息修复</div>
+                                                <small class="text-muted" id="status-levels">等待中...</small>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="step-item mb-3" id="step-categorize">
+                                        <div class="d-flex align-items-center">
+                                            <div class="step-icon me-3">
+                                                <div class="spinner-border spinner-border-sm text-secondary d-none" id="spinner-categorize"></div>
+                                                <i class="bi bi-check-circle text-success d-none" id="check-categorize"></i>
+                                                <i class="bi bi-x-circle text-danger d-none" id="error-categorize"></i>
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div class="fw-bold text-light">智能自动分类</div>
+                                                <small class="text-muted" id="status-categorize">等待中...</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右侧日志区域 -->
+                    <div class="col-lg-8">
+                        <div class="card bg-dark border-secondary h-100">
+                            <div class="card-header bg-dark border-secondary d-flex justify-content-between align-items-center">
+                                <h5 class="text-white mb-0">
+                                    <i class="bi bi-terminal me-2"></i>
+                                    执行日志
+                                </h5>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-light btn-sm" onclick="clearUpdateLogs()">
+                                        <i class="bi bi-trash"></i> 清空
+                                    </button>
+                                    <button class="btn btn-outline-light btn-sm" onclick="toggleAutoScroll()" id="autoScrollBtn">
+                                        <i class="bi bi-arrow-down"></i> 自动滚动
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="updateLogContainer" class="log-container" 
+                                     style="height: 500px; overflow-y: auto; background: #1a1a1a; font-family: 'Courier New', monospace;">
+                                    <div class="text-light p-3">
+                                        <div class="log-entry">
+                                            <span class="text-info">[系统]</span> 
+                                            <span class="text-light">一键更新任务已启动，正在初始化...</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 底部操作栏 -->
+                <div class="row">
+                    <div class="col-12">
+                        <div class="text-center text-white py-3">
+                            <div class="mb-2">
+                                <small class="text-muted">开始时间: <span id="startTime">-</span> | 
+                                       耗时: <span id="elapsedTime">00:00</span> | 
+                                       状态: <span id="taskStatus" class="text-warning">执行中</span>
+                                </small>
+                            </div>
+                            <button class="btn btn-outline-danger btn-sm d-none" id="stopTaskBtn" onclick="stopUpdate()">
+                                <i class="bi bi-stop-circle"></i> 停止任务
+                            </button>
+                            <button class="btn btn-outline-light btn-sm d-none" id="closeProgressBtn" onclick="hideFullScreenProgress()">
+                                <i class="bi bi-x-lg"></i> 关闭
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // 移除已存在的全屏进度
+    const existing = document.getElementById('fullScreenProgress');
+    if (existing) existing.remove();
+
+    // 添加到页面
+    document.body.insertAdjacentHTML('beforeend', fullScreenProgress);
+
+    // 初始化
+    initializeProgressInterface();
+}
+
+/**
+ * 初始化进度界面
+ */
+function initializeProgressInterface() {
+    // 设置开始时间
+    const startTime = new Date();
+    document.getElementById('startTime').textContent = startTime.toLocaleTimeString();
+
+    // 启动时间计时器
+    let startTimestamp = Date.now();
+    window.progressTimer = setInterval(() => {
+        const elapsed = Date.now() - startTimestamp;
+        const minutes = Math.floor(elapsed / 60000);
+        const seconds = Math.floor((elapsed % 60000) / 1000);
+        document.getElementById('elapsedTime').textContent =
+            `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} `;
+    }, 1000);
+
+    // 初始化自动滚动状态
+    window.autoScroll = true;
+
+    // 请求通知权限
+    if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
+}
+
+/**
+ * 开始进度轮询
+ */
+function startProgressPolling(taskId) {
+    const pollProgress = async () => {
+        try {
+            const response = await fetch(`/api/bilibili/one-click-update/${taskId}`);
+            if (response.ok) {
+                const data = await response.json();
+                updateProgressInterface(data);
+
+                // 如果任务还在进行中，继续轮询
+                if (data.overall.status === 'running') {
+                    setTimeout(pollProgress, 2000); // 每2秒轮询一次
+                } else {
+                    // 任务完成或失败
+                    handleTaskComplete(data);
+                }
+            } else {
+                throw new Error('获取进度失败');
+            }
+        } catch (error) {
+            console.error('轮询进度失败:', error);
+            addLogEntry('错误', `轮询进度失败: ${error.message}`);
+            // 继续尝试轮询
+            setTimeout(pollProgress, 5000);
+        }
+    };
+
+    pollProgress();
+}
+
+/**
+ * 更新进度界面
+ */
+function updateProgressInterface(data) {
+    // 更新总体进度
+    const overall = data.overall || {};
+    const progress = overall.progress || 0;
+
+    document.getElementById('overallProgressBar').style.width = `${progress}%`;
+    document.getElementById('overallProgressText').textContent = `${Math.round(progress)}%`;
+
+    // 更新各步骤状态
+    updateStepStatus('following', data.steps?.following_sync);
+    updateStepStatus('groups', data.steps?.groups_sync);
+    updateStepStatus('stats', data.steps?.user_stats);
+    updateStepStatus('levels', data.steps?.level_fix);
+    updateStepStatus('categorize', data.steps?.auto_categorize);
+
+    // 添加日志条目
+    if (data.steps) {
+        Object.entries(data.steps).forEach(([stepName, stepData]) => {
+            if (stepData.logs && stepData.logs.length > 0) {
+                stepData.logs.forEach(log => {
+                    if (!window.displayedLogs) window.displayedLogs = new Set();
+                    const logKey = `${stepName}-${log}`;
+                    if (!window.displayedLogs.has(logKey)) {
+                        addLogEntry(getStepDisplayName(stepName), log);
+                        window.displayedLogs.add(logKey);
+                    }
+                });
+            }
+        });
+    }
+}
+
+/**
+ * 更新步骤状态
+ */
+function updateStepStatus(stepName, stepData) {
+    if (!stepData) return;
+
+    const spinner = document.getElementById(`spinner-${stepName}`);
+    const check = document.getElementById(`check-${stepName}`);
+    const error = document.getElementById(`error-${stepName}`);
+    const status = document.getElementById(`status-${stepName}`);
+
+    // 隐藏所有图标
+    spinner?.classList.add('d-none');
+    check?.classList.add('d-none');
+    error?.classList.add('d-none');
+
+    // 根据状态显示相应图标
+    switch (stepData.status) {
+        case 'pending':
+            status.textContent = '等待中...';
+            break;
+        case 'running':
+            spinner?.classList.remove('d-none');
+            status.textContent = '执行中...';
+            break;
+        case 'completed':
+            check?.classList.remove('d-none');
+            const details = stepData.details || {};
+            if (details.success !== undefined) {
+                status.textContent = `已完成(${details.success} / ${details.total || details.processed || 0})`;
+            } else if (details.updated !== undefined) {
+                status.textContent = `已完成(更新 ${details.updated} 个)`;
+            } else {
+                status.textContent = '已完成';
+            }
+            break;
+        case 'failed':
+            error?.classList.remove('d-none');
+            status.textContent = '失败';
+            break;
+    }
+}
+
+/**
+ * 获取步骤显示名称
+ */
+function getStepDisplayName(stepName) {
+    const names = {
+        'following_sync': '关注同步',
+        'groups_sync': '分组同步',
+        'user_stats': '统计同步',
+        'level_fix': '等级修复',
+        'auto_categorize': '自动分类'
+    };
+    return names[stepName] || stepName;
+}
+
+/**
+ * 添加日志条目
+ */
+function addLogEntry(category, message) {
+    const logContainer = document.getElementById('updateLogContainer');
+    if (!logContainer) return;
+
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = document.createElement('div');
+    logEntry.className = 'log-entry px-3 py-1';
+    logEntry.innerHTML = `
+        <span class="text-muted">[${timestamp}]</span>
+        <span class="text-info">[${category}]</span>
+        <span class="text-light">${message}</span>
+    `;
+
+    logContainer.appendChild(logEntry);
+
+    // 自动滚动到底部
+    if (window.autoScroll) {
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+}
+
+/**
+ * 处理任务完成
+ */
+function handleTaskComplete(data) {
+    clearInterval(window.progressTimer);
+
+    const overall = data.overall || {};
+    const summary = data.summary || {};
+
+    if (overall.status === 'completed') {
+        document.getElementById('taskStatus').textContent = '已完成';
+        document.getElementById('taskStatus').className = 'text-success';
+
+        addLogEntry('系统', `所有任务已完成! 耗时: ${summary.duration || '未知'}`);
+        if (summary.details) {
+            addLogEntry('系统', `执行结果: ${summary.details}`);
+        }
+
+        // 显示通知
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('哔哩哔哩一键更新', {
+                body: '所有数据已同步完成！',
+                icon: '/static/img/default-avatar.png'
+            });
+        }
+
+        showMessage('一键更新完成！所有数据已同步。', 'success');
+
+    } else if (overall.status === 'failed') {
+        document.getElementById('taskStatus').textContent = '失败';
+        document.getElementById('taskStatus').className = 'text-danger';
+
+        addLogEntry('系统', `任务执行失败: ${overall.error || '未知错误'}`);
+        showMessage('一键更新失败，请查看日志了解详情。', 'danger');
+    }
+
+    // 显示关闭按钮
+    document.getElementById('closeProgressBtn')?.classList.remove('d-none');
+
+    // 5秒后自动刷新仪表板数据
+    setTimeout(() => {
+        loadDashboardData();
+    }, 5000);
+}
+
+/**
+ * 清空日志
+ */
+function clearUpdateLogs() {
+    const logContainer = document.getElementById('updateLogContainer');
+    if (logContainer) {
+        logContainer.innerHTML = `
+            <div class="text-light p-3">
+                <div class="log-entry">
+                    <span class="text-info">[系统]</span>
+                    <span class="text-light">日志已清空</span>
+                </div>
+            </div>
+        `;
+    }
+    window.displayedLogs = new Set();
+}
+
+/**
+ * 切换自动滚动
+ */
+function toggleAutoScroll() {
+    window.autoScroll = !window.autoScroll;
+    const btn = document.getElementById('autoScrollBtn');
+    if (btn) {
+        if (window.autoScroll) {
+            btn.innerHTML = '<i class="bi bi-arrow-down"></i> 自动滚动';
+            btn.classList.remove('btn-outline-warning');
+            btn.classList.add('btn-outline-light');
+        } else {
+            btn.innerHTML = '<i class="bi bi-pause"></i> 手动滚动';
+            btn.classList.remove('btn-outline-light');
+            btn.classList.add('btn-outline-warning');
+        }
+    }
+}
+
+/**
+ * 停止更新任务
+ */
+function stopUpdate() {
+    // 这里可以实现停止任务的逻辑
+    if (confirm('确定要停止当前更新任务吗？')) {
+        addLogEntry('系统', '用户手动停止了更新任务');
+        document.getElementById('taskStatus').textContent = '已停止';
+        document.getElementById('taskStatus').className = 'text-warning';
+        clearInterval(window.progressTimer);
+        document.getElementById('closeProgressBtn')?.classList.remove('d-none');
+    }
+}
+
+/**
+ * 隐藏一键更新进度
+ */
+function hideOneClickUpdateProgress() {
+    const progressModal = document.getElementById('oneClickProgressModal');
+    if (progressModal) {
+        const modal = bootstrap.Modal.getInstance(progressModal);
+        if (modal) {
+            modal.hide();
+        }
+        progressModal.remove();
+    }
+}
+
+/**
+ * 刷新仪表板数据
+ */
+function refreshDashboard() {
+    location.reload();
+}
+
+// 绑定一键更新按钮事件
+document.addEventListener('DOMContentLoaded', function () {
+    const oneClickBtn = document.getElementById('one-click-update-btn');
+    if (oneClickBtn) {
+        oneClickBtn.addEventListener('click', oneClickUpdate);
+    }
+});
+
 // 全局函数，供其他地方调用
 window.startSync = startSync;
 window.autoCategories = autoCategories;
@@ -655,4 +1282,26 @@ window.generateReport = generateReport;
 window.showAllInactiveUsers = showAllInactiveUsers;
 window.filterInactiveUsers = filterInactiveUsers;
 window.unfollowUser = unfollowUser;
-window.batchUnfollowInactive = batchUnfollowInactive; 
+window.batchUnfollowInactive = batchUnfollowInactive;
+window.oneClickUpdate = oneClickUpdate;
+window.startOneClickUpdate = startOneClickUpdate;
+window.refreshDashboard = refreshDashboard;
+
+/**
+ * 隐藏全屏进度界面
+ */
+function hideFullScreenProgress() {
+    const element = document.getElementById('fullScreenProgress');
+    if (element) {
+        element.style.opacity = '0';
+        setTimeout(() => {
+            element.remove();
+            clearInterval(window.progressTimer);
+        }, 300);
+    }
+}
+
+function hideOneClickUpdateProgress() {
+    // 兼容旧代码
+    hideFullScreenProgress();
+} 

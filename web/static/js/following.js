@@ -913,4 +913,123 @@ async function fixUserLevels() {
     } finally {
         hideLoading();
     }
+}
+
+/**
+ * 一键更新所有信息
+ */
+async function oneClickUpdate() {
+    // 使用更详细的确认对话框
+    const confirmed = confirm(`一键更新全部信息确认
+
+将执行以下操作：
+• 同步全部关注列表和分组信息
+• 同步全部用户统计数据  
+• 修复全部等级为0的用户信息
+• 智能自动分类
+
+⚠️ 重要提醒：
+• 本次将同步全部用户，可能需要很长时间（1-3小时）
+• 已增加API延迟以降低封号风险
+• 建议在网络稳定且空闲时执行
+• 请保持页面开启，勿关闭浏览器
+
+确定要继续吗？`);
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        showLoading();
+        showMessage('正在启动一键更新任务，正在全力同步...', 'info');
+
+        const response = await fetch('/api/bilibili/one-click-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.task_id) {
+            showMessage('一键更新任务已启动，正在后台执行...', 'success');
+
+            // 显示详细进度提示
+            setTimeout(() => {
+                showMessage('一键更新正在进行中，这可能需要很长时间，请耐心等待...', 'info');
+            }, 3000);
+
+            // 请求通知权限
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+
+            // 定时刷新数据（每60秒检查一次）
+            let refreshCount = 0;
+            const maxRefreshes = 180; // 最多刷新180次（3小时）
+
+            const refreshInterval = setInterval(async () => {
+                refreshCount++;
+                console.log(`自动刷新数据 ${refreshCount}/${maxRefreshes}`);
+
+                try {
+                    await loadFollowingList(true); // 静默刷新
+                    await loadCategories();
+                } catch (error) {
+                    console.error('自动刷新失败:', error);
+                }
+
+                if (refreshCount >= maxRefreshes) {
+                    clearInterval(refreshInterval);
+                    showMessage('已达到最大刷新次数，请手动检查任务状态', 'warning');
+                }
+            }, 60000);
+
+            // 监控任务状态
+            const monitorTask = async () => {
+                try {
+                    const statusResponse = await fetch(`/api/bilibili/one-click-update/${result.task_id}`);
+                    if (statusResponse.ok) {
+                        const statusData = await statusResponse.json();
+                        if (statusData.overall.status === 'completed') {
+                            clearInterval(refreshInterval);
+                            showMessage('一键更新已完成！正在刷新数据...', 'success');
+                            await loadFollowingList();
+                            await loadCategories();
+
+                            // 显示通知
+                            if ('Notification' in window && Notification.permission === 'granted') {
+                                new Notification('哔哩哔哩一键更新', {
+                                    body: '关注列表数据已全部同步完成！',
+                                    icon: '/static/img/default-avatar.png'
+                                });
+                            }
+                        } else if (statusData.overall.status === 'failed') {
+                            clearInterval(refreshInterval);
+                            showMessage('一键更新失败，请检查网络或重试', 'danger');
+                        } else {
+                            // 任务仍在进行中，继续监控
+                            setTimeout(monitorTask, 60000);
+                        }
+                    }
+                } catch (error) {
+                    console.error('监控任务状态失败:', error);
+                    setTimeout(monitorTask, 60000);
+                }
+            };
+
+            // 开始监控任务（1分钟后开始）
+            setTimeout(monitorTask, 60000);
+
+        } else {
+            throw new Error(result.detail || '启动一键更新失败');
+        }
+    } catch (error) {
+        console.error('一键更新失败:', error);
+        showMessage('一键更新失败: ' + error.message, 'danger');
+    } finally {
+        hideLoading();
+    }
 } 

@@ -847,4 +847,580 @@ async def sync_user_stats(req: Request, limit: int = 10):
         
     except Exception as e:
         logger.error(f"同步用户统计数据失败: {e}")
-        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}") 
+        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
+
+
+@router.post("/one-click-update")
+async def one_click_update_all(background_tasks: BackgroundTasks, req: Request):
+    """一键更新所有信息：关注列表、分组信息、用户统计、等级信息等"""
+    try:
+        api = await get_bilibili_api()
+        
+        if not api.is_configured():
+            raise HTTPException(status_code=400, detail="未配置哔哩哔哩Cookie")
+        
+        # 创建一个唯一的任务ID
+        import time
+        task_id = f"update_{int(time.time())}"
+        
+        # 在后台执行一键更新任务
+        background_tasks.add_task(_one_click_update_task, req.app.state.db_manager, task_id)
+        
+        return {"message": "一键更新任务已启动", "status": "started", "task_id": task_id}
+        
+    except Exception as e:
+        logger.error(f"启动一键更新任务失败: {e}")
+        raise HTTPException(status_code=500, detail="启动一键更新任务失败")
+
+
+async def _one_click_update_task(db_manager, task_id):
+    """一键更新的后台任务"""
+    try:
+        api = await get_bilibili_api()
+        
+        # 创建更详细的结果记录
+        update_results = {
+            "task_id": task_id,
+            "start_time": datetime.now(),
+            "following_sync": {"status": "pending", "details": {}, "logs": []},
+            "groups_sync": {"status": "pending", "details": {}, "logs": []},
+            "user_stats": {"status": "pending", "details": {}, "logs": []},
+            "level_fix": {"status": "pending", "details": {}, "logs": []},
+            "auto_categorize": {"status": "pending", "details": {}, "logs": []},
+            "overall": {"status": "running", "progress": 0}
+        }
+        
+        # 将结果存储到应用状态中，供前端查询
+        if not hasattr(db_manager, '_update_cache'):
+            db_manager._update_cache = {}
+        db_manager._update_cache[task_id] = update_results
+        
+        logger.info(f"开始执行一键更新任务 {task_id}...")
+        
+        # 1. 同步关注列表和分组信息
+        logger.info("步骤 1/5: 同步关注列表和分组信息...")
+        update_results["overall"]["progress"] = 10
+        try:
+            record_id = await db_manager.insert_sync_record("one_click_following_sync")
+            update_results["following_sync"]["logs"].append("开始同步关注列表...")
+            
+            # 获取分组信息
+            update_results["groups_sync"]["logs"].append("开始获取分组信息...")
+            bilibili_groups = await api.get_follow_groups()
+            if bilibili_groups:
+                for group in bilibili_groups:
+                    group_id = group.get('tagid', 0)
+                    group_name = group.get('name', '未知分组')
+                    group_count = group.get('count', 0)
+                    
+                    if group_id > 0:
+                        await db_manager.insert_or_update_follow_group(
+                            group_id, group_name, group_count
+                        )
+                logger.info(f"分组信息同步完成，共 {len(bilibili_groups)} 个分组")
+                update_results["groups_sync"]["status"] = "completed"
+                update_results["groups_sync"]["details"] = {"groups_count": len(bilibili_groups)}
+                update_results["groups_sync"]["logs"].append(f"成功同步 {len(bilibili_groups)} 个分组")
+            
+            # 获取所有关注列表（不限制数量）
+            def progress_callback(current, total):
+                progress_msg = f"同步关注列表进度: {current}/{total}"
+                logger.info(progress_msg)
+                update_results["following_sync"]["logs"].append(progress_msg)
+                # 更新总体进度 (10% - 40%)
+                if total > 0:
+                    sync_progress = min((current / total) * 30, 30)
+                    update_results["overall"]["progress"] = 10 + sync_progress
+            
+            update_results["following_sync"]["logs"].append("开始获取所有关注用户...")
+            following_list = await api.get_all_following(progress_callback)
+            
+            success_count = 0
+            error_count = 0
+            
+            update_results["following_sync"]["logs"].append(f"开始处理 {len(following_list)} 个用户的数据...")
+            
+            for i, user in enumerate(following_list):
+                try:
+                    uid = user.get('uid') or user.get('mid')
+                    if not uid:
+                        error_count += 1
+                        update_results["following_sync"]["logs"].append(f"用户 {i+1} 缺少UID，跳过")
+                        continue
+                    
+                    user['uid'] = uid
+                    
+                    # 分类
+                    from ..bilibili.analyzer import FollowingAnalyzer
+                    analyzer = FollowingAnalyzer()
+                    category = analyzer.classify_user(user)
+                    user["category"] = category
+                    
+                    # 分组信息
+                    tag_list = user.get('tag', [])
+                    if isinstance(tag_list, list) and tag_list:
+                        user['group_id'] = tag_list[0]
+                    else:
+                        user['group_id'] = 0
+                    
+                    if await db_manager.insert_following_user(user):
+                        success_count += 1
+                    else:
+                        error_count += 1
+                        update_results["following_sync"]["logs"].append(f"用户 {user.get('uname', uid)} 保存失败")
+                    
+                    # 每处理100个用户更新一次进度日志
+                    if (i + 1) % 100 == 0:
+                        progress_msg = f"已处理 {i+1}/{len(following_list)} 个用户，成功 {success_count}，失败 {error_count}"
+                        update_results["following_sync"]["logs"].append(progress_msg)
+                        
+                except Exception as e:
+                    error_count += 1
+                    error_msg = f"处理用户数据异常: {e}"
+                    logger.error(error_msg)
+                    update_results["following_sync"]["logs"].append(error_msg)
+            
+            await db_manager.update_sync_record(record_id, success_count, error_count, "completed")
+            update_results["following_sync"]["status"] = "completed"
+            update_results["following_sync"]["details"] = {
+                "total": len(following_list),
+                "success": success_count,
+                "error": error_count
+            }
+            
+            final_msg = f"关注列表同步完成: 获取 {len(following_list)} 个用户, 成功 {success_count}, 失败 {error_count}"
+            logger.info(final_msg)
+            update_results["following_sync"]["logs"].append(final_msg)
+            update_results["overall"]["progress"] = 40
+            
+        except Exception as e:
+            logger.error(f"同步关注列表失败: {e}")
+            update_results["following_sync"]["status"] = "failed"
+            update_results["following_sync"]["details"] = {"error": str(e)}
+        
+        # 2. 同步用户统计数据（全部用户）
+        logger.info("步骤 2/5: 同步用户统计数据（全部用户）...")
+        update_results["overall"]["progress"] = 45
+        try:
+            following_list = await db_manager.get_following_list()
+            users_to_process = following_list  # 处理全部用户
+            
+            update_results["user_stats"]["logs"].append(f"开始同步 {len(users_to_process)} 个用户的统计数据...")
+            
+            updated_count = 0
+            error_count = 0
+            consecutive_failures = 0
+            max_consecutive_failures = 10  # 增加容忍度
+            
+            for i, user in enumerate(users_to_process):
+                try:
+                    uid = user["uid"]
+                    uname = user.get('uname', str(uid))
+                    
+                    if consecutive_failures >= max_consecutive_failures:
+                        warning_msg = f"检测到连续 {consecutive_failures} 次失败，可能遇到API限制，暂停10秒后继续..."
+                        logger.warning(warning_msg)
+                        update_results["user_stats"]["logs"].append(warning_msg)
+                        await asyncio.sleep(10)  # 暂停10秒
+                        consecutive_failures = 0  # 重置计数器
+                    
+                    real_stats = await api.get_user_stats(uid)
+                    
+                    if real_stats:
+                        cursor = await db_manager._connection.execute(
+                            "SELECT uid FROM user_stats WHERE uid = ?", (uid,)
+                        )
+                        existing = await cursor.fetchone()
+                        
+                        if existing:
+                            await db_manager._connection.execute("""
+                                UPDATE user_stats SET 
+                                    fans_count = ?, following_count = ?, video_count = ?,
+                                    total_views = ?, last_video_time = ?, activity_score = ?
+                                WHERE uid = ?
+                            """, (
+                                real_stats["fans_count"], real_stats["following_count"], 
+                                real_stats["video_count"], real_stats["total_views"],
+                                real_stats["last_video_time"], real_stats["activity_score"], uid
+                            ))
+                        else:
+                            await db_manager._connection.execute("""
+                                INSERT INTO user_stats 
+                                (uid, fans_count, following_count, video_count, total_views, 
+                                 last_video_time, activity_score) 
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                uid, real_stats["fans_count"], real_stats["following_count"],
+                                real_stats["video_count"], real_stats["total_views"],
+                                real_stats["last_video_time"], real_stats["activity_score"]
+                            ))
+                        
+                        updated_count += 1
+                        consecutive_failures = 0
+                        
+                        # 增加延迟时间以避免封号（3-5秒随机延迟）
+                        import random
+                        delay = random.uniform(3.0, 5.0)
+                        await asyncio.sleep(delay)
+                        
+                    else:
+                        error_count += 1
+                        consecutive_failures += 1
+                        error_msg = f"用户 {uname} 统计数据获取失败"
+                        update_results["user_stats"]["logs"].append(error_msg)
+                    
+                    # 每处理10个用户更新一次进度
+                    if (i + 1) % 10 == 0:
+                        progress_msg = f"统计数据同步进度: {i+1}/{len(users_to_process)}, 成功: {updated_count}, 失败: {error_count}"
+                        logger.info(progress_msg)
+                        update_results["user_stats"]["logs"].append(progress_msg)
+                        
+                        # 更新总体进度 (45% - 75%)
+                        stats_progress = min((i / len(users_to_process)) * 30, 30)
+                        update_results["overall"]["progress"] = 45 + stats_progress
+                        
+                except Exception as e:
+                    error_count += 1
+                    consecutive_failures += 1
+                    error_msg = f"同步用户 {user.get('uname', uid)} 统计数据失败: {e}"
+                    logger.error(error_msg)
+                    update_results["user_stats"]["logs"].append(error_msg)
+            
+            await db_manager._connection.commit()
+            update_results["user_stats"]["status"] = "completed"
+            update_results["user_stats"]["details"] = {
+                "processed": len(users_to_process),
+                "updated": updated_count,
+                "error": error_count
+            }
+            
+            final_msg = f"用户统计数据同步完成: 处理 {len(users_to_process)} 个用户, 成功 {updated_count} 个, 失败 {error_count} 个"
+            logger.info(final_msg)
+            update_results["user_stats"]["logs"].append(final_msg)
+            update_results["overall"]["progress"] = 75
+            
+        except Exception as e:
+            logger.error(f"同步用户统计数据失败: {e}")
+            update_results["user_stats"]["status"] = "failed"
+            update_results["user_stats"]["details"] = {"error": str(e)}
+        
+        # 3. 修复等级信息（全部需要修复的用户）
+        logger.info("步骤 3/5: 修复用户等级信息...")
+        update_results["overall"]["progress"] = 80
+        try:
+            users_to_fix = await db_manager.get_users_with_zero_level()  # 获取所有需要修复的用户
+            
+            update_results["level_fix"]["logs"].append(f"发现 {len(users_to_fix)} 个用户需要修复等级信息...")
+            
+            fixed_count = 0
+            error_count = 0
+            consecutive_failures = 0
+            max_consecutive_failures = 8  # 适当增加容忍度
+            
+            for i, user in enumerate(users_to_fix):
+                try:
+                    uid = user.get('uid')
+                    uname = user.get('uname', 'Unknown')
+                    if not uid:
+                        continue
+                    
+                    if consecutive_failures >= max_consecutive_failures:
+                        warning_msg = f"检测到连续 {consecutive_failures} 次失败，可能遇到API限制，暂停8秒后继续..."
+                        logger.warning(warning_msg)
+                        update_results["level_fix"]["logs"].append(warning_msg)
+                        await asyncio.sleep(8)  # 暂停8秒
+                        consecutive_failures = 0  # 重置计数器
+                    
+                    user_detail = await api.get_user_info(uid)
+                    if user_detail and user_detail.get('card'):
+                        card_info = user_detail['card']
+                        
+                        if 'level_info' in card_info:
+                            new_level = card_info['level_info'].get('current_level', 0)
+                            
+                            if new_level > 0:
+                                await db_manager._connection.execute(
+                                    "UPDATE following_list SET level = ? WHERE uid = ?",
+                                    (new_level, uid)
+                                )
+                                await db_manager._connection.commit()
+                                fixed_count += 1
+                                consecutive_failures = 0
+                                
+                                success_msg = f"成功修复用户 {uname} 等级: {new_level}"
+                                update_results["level_fix"]["logs"].append(success_msg)
+                                
+                                # 增加延迟时间以避免封号（2-4秒随机延迟）
+                                import random
+                                delay = random.uniform(2.0, 4.0)
+                                await asyncio.sleep(delay)
+                        else:
+                            consecutive_failures += 1
+                            error_msg = f"用户 {uname} 等级信息不可用"
+                            update_results["level_fix"]["logs"].append(error_msg)
+                    else:
+                        consecutive_failures += 1
+                        error_count += 1
+                        error_msg = f"获取用户 {uname} 详细信息失败"
+                        update_results["level_fix"]["logs"].append(error_msg)
+                    
+                    # 每处理5个用户更新一次进度
+                    if (i + 1) % 5 == 0:
+                        progress_msg = f"等级修复进度: {i+1}/{len(users_to_fix)}, 成功: {fixed_count}, 失败: {error_count}"
+                        logger.info(progress_msg)
+                        update_results["level_fix"]["logs"].append(progress_msg)
+                        
+                except Exception as e:
+                    error_count += 1
+                    consecutive_failures += 1
+                    error_msg = f"修复用户 {user.get('uname', 'Unknown')} 等级信息失败: {e}"
+                    logger.error(error_msg)
+                    update_results["level_fix"]["logs"].append(error_msg)
+            
+            update_results["level_fix"]["status"] = "completed"
+            update_results["level_fix"]["details"] = {
+                "processed": len(users_to_fix),
+                "fixed": fixed_count,
+                "error": error_count
+            }
+            
+            final_msg = f"等级信息修复完成: 处理 {len(users_to_fix)} 个用户, 成功修复 {fixed_count} 个, 失败 {error_count} 个"
+            logger.info(final_msg)
+            update_results["level_fix"]["logs"].append(final_msg)
+            update_results["overall"]["progress"] = 90
+            
+        except Exception as e:
+            logger.error(f"修复等级信息失败: {e}")
+            update_results["level_fix"]["status"] = "failed"
+            update_results["level_fix"]["details"] = {"error": str(e)}
+        
+        # 4. 自动分类（轻量级操作）
+        logger.info("步骤 4/5: 执行自动分类...")
+        update_results["overall"]["progress"] = 95
+        try:
+            from ..bilibili.analyzer import FollowingAnalyzer
+            analyzer = FollowingAnalyzer()
+            
+            users = await db_manager.get_following_list()
+            updated_count = 0
+            error_count = 0
+            
+            # 筛选需要分类的用户
+            users_to_categorize = [user for user in users if user.get('category', 'unknown') in ['unknown', '']]
+            update_results["auto_categorize"]["logs"].append(f"发现 {len(users_to_categorize)} 个用户需要重新分类...")
+            
+            for i, user in enumerate(users_to_categorize):
+                try:
+                    uid = user.get('uid')
+                    uname = user.get('uname', 'Unknown')
+                    current_category = user.get('category', 'unknown')
+                    
+                    new_category = analyzer.classify_user(user)
+                    if new_category != current_category:
+                        await db_manager.update_user_category(uid, new_category)
+                        updated_count += 1
+                        
+                        success_msg = f"用户 {uname} 分类更新: {current_category} -> {new_category}"
+                        update_results["auto_categorize"]["logs"].append(success_msg)
+                    
+                    # 每处理50个用户更新一次进度
+                    if (i + 1) % 50 == 0:
+                        progress_msg = f"自动分类进度: {i+1}/{len(users_to_categorize)}, 已更新: {updated_count}"
+                        update_results["auto_categorize"]["logs"].append(progress_msg)
+                            
+                except Exception as e:
+                    error_count += 1
+                    error_msg = f"自动分类用户 {user.get('uname', 'Unknown')} 失败: {e}"
+                    logger.error(error_msg)
+                    update_results["auto_categorize"]["logs"].append(error_msg)
+            
+            update_results["auto_categorize"]["status"] = "completed"
+            update_results["auto_categorize"]["details"] = {
+                "checked": len(users_to_categorize),
+                "updated": updated_count,
+                "error": error_count
+            }
+            
+            final_msg = f"自动分类完成: 检查 {len(users_to_categorize)} 个用户, 更新 {updated_count} 个用户的分类, 失败 {error_count} 个"
+            logger.info(final_msg)
+            update_results["auto_categorize"]["logs"].append(final_msg)
+            update_results["overall"]["progress"] = 100
+            
+        except Exception as e:
+            logger.error(f"自动分类失败: {e}")
+            update_results["auto_categorize"]["status"] = "failed"
+            update_results["auto_categorize"]["details"] = {"error": str(e)}
+        
+        # 5. 记录更新结果
+        logger.info("步骤 5/5: 更新任务完成")
+        update_results["overall"]["status"] = "completed"
+        update_results["overall"]["progress"] = 100
+        update_results["end_time"] = datetime.now()
+        
+        # 统计总体结果
+        task_keys = ["following_sync", "groups_sync", "user_stats", "level_fix", "auto_categorize"]
+        completed_tasks = sum(1 for key in task_keys if update_results[key]["status"] == "completed")
+        failed_tasks = sum(1 for key in task_keys if update_results[key]["status"] == "failed")
+        
+        # 创建总结日志
+        duration = update_results["end_time"] - update_results["start_time"]
+        duration_str = str(duration).split('.')[0]  # 去掉微秒
+        
+        summary_log = f"一键更新任务完成! 耗时: {duration_str}, 成功: {completed_tasks}/{len(task_keys)} 个任务, 失败: {failed_tasks} 个任务"
+        logger.info(summary_log)
+        
+        # 汇总各步骤的详细结果
+        summary_details = []
+        if update_results["following_sync"]["status"] == "completed":
+            details = update_results["following_sync"]["details"]
+            summary_details.append(f"关注列表同步: {details.get('success', 0)}/{details.get('total', 0)} 成功")
+        
+        if update_results["groups_sync"]["status"] == "completed":
+            details = update_results["groups_sync"]["details"]
+            summary_details.append(f"分组同步: {details.get('groups_count', 0)} 个分组")
+        
+        if update_results["user_stats"]["status"] == "completed":
+            details = update_results["user_stats"]["details"]
+            summary_details.append(f"统计数据同步: {details.get('updated', 0)}/{details.get('processed', 0)} 成功")
+        
+        if update_results["level_fix"]["status"] == "completed":
+            details = update_results["level_fix"]["details"]
+            summary_details.append(f"等级修复: {details.get('fixed', 0)}/{details.get('processed', 0)} 成功")
+        
+        if update_results["auto_categorize"]["status"] == "completed":
+            details = update_results["auto_categorize"]["details"]
+            summary_details.append(f"自动分类: {details.get('updated', 0)}/{details.get('checked', 0)} 成功")
+        
+        summary_detail_str = " | ".join(summary_details)
+        logger.info(f"详细结果: {summary_detail_str}")
+        
+        # 将任务完成时间和状态更新到缓存
+        update_results["summary"] = {
+            "duration": duration_str,
+            "completed_tasks": completed_tasks,
+            "total_tasks": len(task_keys),
+            "failed_tasks": failed_tasks,
+            "details": summary_detail_str
+        }
+        
+    except Exception as e:
+        logger.error(f"一键更新任务执行失败: {e}")
+        update_results["overall"]["status"] = "failed"
+        update_results["overall"]["error"] = str(e)
+        update_results["end_time"] = datetime.now()
+        
+        # 即使任务失败，也要保留已执行的部分结果
+        if "start_time" in update_results:
+            duration = update_results["end_time"] - update_results["start_time"]
+            duration_str = str(duration).split('.')[0]
+            update_results["summary"] = {
+                "duration": duration_str,
+                "status": "failed",
+                "error": str(e)
+            }
+
+
+@router.get("/one-click-update/{task_id}")
+async def get_one_click_update_progress(task_id: str, req: Request):
+    """获取一键更新任务的进度"""
+    try:
+        db_manager = req.app.state.db_manager
+        
+        if not hasattr(db_manager, '_update_cache') or task_id not in db_manager._update_cache:
+            raise HTTPException(status_code=404, detail="任务不存在或已过期")
+        
+        update_results = db_manager._update_cache[task_id]
+        
+        # 返回进度信息
+        return {
+            "task_id": task_id,
+            "overall": update_results.get("overall", {}),
+            "steps": {
+                "following_sync": {
+                    "status": update_results["following_sync"]["status"],
+                    "details": update_results["following_sync"]["details"],
+                    "logs": update_results["following_sync"]["logs"][-10:]  # 最近10条日志
+                },
+                "groups_sync": {
+                    "status": update_results["groups_sync"]["status"],
+                    "details": update_results["groups_sync"]["details"],
+                    "logs": update_results["groups_sync"]["logs"][-5:]  # 最近5条日志
+                },
+                "user_stats": {
+                    "status": update_results["user_stats"]["status"],
+                    "details": update_results["user_stats"]["details"],
+                    "logs": update_results["user_stats"]["logs"][-10:]  # 最近10条日志
+                },
+                "level_fix": {
+                    "status": update_results["level_fix"]["status"],
+                    "details": update_results["level_fix"]["details"],
+                    "logs": update_results["level_fix"]["logs"][-10:]  # 最近10条日志
+                },
+                "auto_categorize": {
+                    "status": update_results["auto_categorize"]["status"],
+                    "details": update_results["auto_categorize"]["details"],
+                    "logs": update_results["auto_categorize"]["logs"][-5:]  # 最近5条日志
+                }
+            },
+            "summary": update_results.get("summary", {}),
+            "start_time": update_results.get("start_time", "").isoformat() if update_results.get("start_time") else "",
+            "end_time": update_results.get("end_time", "").isoformat() if update_results.get("end_time") else ""
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取任务进度失败: {e}")
+        raise HTTPException(status_code=500, detail="获取任务进度失败")
+
+
+@router.get("/one-click-update/{task_id}/logs")
+async def get_one_click_update_logs(task_id: str, req: Request, step: str = None):
+    """获取一键更新任务的详细日志"""
+    try:
+        db_manager = req.app.state.db_manager
+        
+        if not hasattr(db_manager, '_update_cache') or task_id not in db_manager._update_cache:
+            raise HTTPException(status_code=404, detail="任务不存在或已过期")
+        
+        update_results = db_manager._update_cache[task_id]
+        
+        if step:
+            # 获取特定步骤的日志
+            if step not in update_results:
+                raise HTTPException(status_code=404, detail="步骤不存在")
+            
+            return {
+                "task_id": task_id,
+                "step": step,
+                "logs": update_results[step].get("logs", []),
+                "status": update_results[step].get("status", "pending"),
+                "details": update_results[step].get("details", {})
+            }
+        else:
+            # 获取所有步骤的日志
+            all_logs = []
+            steps = ["following_sync", "groups_sync", "user_stats", "level_fix", "auto_categorize"]
+            
+            for step_name in steps:
+                step_data = update_results.get(step_name, {})
+                step_logs = step_data.get("logs", [])
+                for log in step_logs:
+                    all_logs.append({
+                        "step": step_name,
+                        "message": log,
+                        "status": step_data.get("status", "pending")
+                    })
+            
+            return {
+                "task_id": task_id,
+                "all_logs": all_logs,
+                "summary": update_results.get("summary", {}),
+                "overall": update_results.get("overall", {})
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取任务日志失败: {e}")
+        raise HTTPException(status_code=500, detail="获取任务日志失败") 

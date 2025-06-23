@@ -288,6 +288,9 @@
             <p class="text-muted">分析您的关注列表，发现有价值的洞察</p>
         </div>
         <div>
+            <button class="btn btn-info me-2" onclick="oneClickUpdate()">
+                <i class="fas fa-rocket"></i> 一键更新所有信息
+            </button>
             <button class="btn btn-success me-2" onclick="updateCategories()">
                 <i class="fas fa-tags"></i> 更新分类
             </button>
@@ -1748,6 +1751,95 @@
         } catch (error) {
             console.error('更新分类失败:', error);
             showMessage('更新分类失败: ' + error.message, 'danger');
+        }
+    }
+
+    /**
+     * 一键更新所有信息
+     */
+    async function oneClickUpdate() {
+        if (!confirm('确定要执行一键更新吗？这将依次同步关注列表、分组信息、用户统计、等级信息和自动分类，整个过程可能需要5-10分钟。')) {
+            return;
+        }
+
+        try {
+            // 显示全屏加载动画
+            const loader = document.getElementById('fullscreenLoader');
+            const subtitle = document.getElementById('loaderSubtitle');
+            const info = document.getElementById('loaderInfo');
+
+            subtitle.textContent = '正在执行一键更新，包括关注列表、分组、统计、等级等信息...';
+            info.textContent = '这是一个综合性更新过程，请耐心等待...';
+            loader.style.display = 'flex';
+
+            showMessage('正在启动一键更新任务...', 'info');
+
+            const response = await fetch('/api/bilibili/one-click-update', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showMessage('一键更新任务已启动！正在后台执行，预计需要5-10分钟。', 'success');
+
+                // 定时刷新分析数据
+                let refreshCount = 0;
+                const maxRefreshes = 15; // 最多刷新15次（7.5分钟）
+
+                const refreshInterval = setInterval(async () => {
+                    refreshCount++;
+                    console.log(`自动刷新分析数据 ${refreshCount}/${maxRefreshes}`);
+
+                    try {
+                        await loadAnalysisData();
+
+                        // 更新进度提示
+                        const progress = Math.min((refreshCount / maxRefreshes) * 100, 95);
+                        const progressElement = document.getElementById('syncProgress');
+                        if (progressElement) {
+                            progressElement.style.width = progress + '%';
+                        }
+
+                        if (refreshCount === 5) {
+                            showMessage('一键更新进行中...关注列表同步可能已完成', 'info');
+                        } else if (refreshCount === 10) {
+                            showMessage('一键更新进行中...用户统计同步可能已完成', 'info');
+                        }
+
+                    } catch (error) {
+                        console.error('自动刷新失败:', error);
+                    }
+
+                    if (refreshCount >= maxRefreshes) {
+                        clearInterval(refreshInterval);
+                        hideFullscreenLoader();
+                        showMessage('一键更新任务应该已完成！请检查最新的数据分析结果。', 'success');
+
+                        // 发送浏览器通知
+                        sendNotification('一键更新完成', '所有信息已更新，请查看最新的分析结果');
+                    }
+                }, 30000); // 每30秒刷新一次
+
+                // 5分钟后自动隐藏加载动画（即使任务可能还在进行）
+                setTimeout(() => {
+                    if (refreshCount < maxRefreshes) {
+                        hideFullscreenLoader();
+                        showMessage('一键更新正在后台继续进行，您可以正常使用页面', 'info');
+                    }
+                }, 300000);
+
+            } else {
+                throw new Error(result.detail || '启动一键更新失败');
+            }
+        } catch (error) {
+            hideFullscreenLoader();
+            console.error('一键更新失败:', error);
+            showMessage('一键更新失败: ' + error.message, 'danger');
+            sendNotification('一键更新失败', error.message);
         }
     }
 </script>

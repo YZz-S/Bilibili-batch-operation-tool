@@ -626,4 +626,28 @@ class DatabaseManager:
             return True
         except Exception as e:
             self.logger.error(f"更新同步记录失败: {e}")
-            return False 
+            return False
+    
+    async def get_users_with_zero_level(self) -> List[Dict[str, Any]]:
+        """获取等级为0或空的用户列表"""
+        try:
+            sql = '''
+                SELECT uid, uname, face, sign, level, category, group_id
+                FROM following_list 
+                WHERE level = 0 OR level IS NULL
+                ORDER BY follow_time DESC
+            '''
+            cursor = await self._connection.execute(sql)
+            rows = await cursor.fetchall()
+            
+            # 转换为字典列表
+            columns = [description[0] for description in cursor.description]
+            result = []
+            for row in rows:
+                user_dict = dict(zip(columns, row))
+                result.append(user_dict)
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"获取零等级用户列表失败: {e}")
+            return [] 
