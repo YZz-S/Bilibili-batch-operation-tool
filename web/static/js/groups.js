@@ -12,6 +12,7 @@ let currentPage = 1;
 let currentSearch = '';
 let totalPages = 1;
 let pageSize = 50; // 默认每页50个
+let currentViewMode = 'detailed'; // 当前视图模式
 
 /**
  * 显示加载状态
@@ -94,54 +95,76 @@ async function loadGroups() {
 }
 
 /**
- * 渲染分组列表
+ * 渲染分组列表 - 横向布局
  */
 function renderGroupsList() {
-    const groupsList = document.getElementById('groupsList');
-    if (!groupsList) return;
+    const groupsContainer = document.getElementById('groupsHorizontal');
+    if (!groupsContainer) return;
+
+    // 保留默认的未分组标签，只更新其他分组
+    const ungroupedTag = groupsContainer.querySelector('#group-0');
+    groupsContainer.innerHTML = '';
+
+    // 重新添加未分组标签
+    if (ungroupedTag) {
+        groupsContainer.appendChild(ungroupedTag);
+    }
 
     if (allGroups.length === 0) {
-        groupsList.innerHTML = `
-            <div class="text-center py-4">
-                <i class="bi bi-collection text-muted mb-3" style="font-size: 2rem;"></i>
-                <h6 class="text-muted">暂无分组</h6>
-                <p class="text-muted small">点击"同步分组"从B站获取分组数据</p>
+        const emptyTag = document.createElement('div');
+        emptyTag.className = 'group-tag disabled';
+        emptyTag.innerHTML = `
+            <div class="group-tag-content">
+                <i class="bi bi-info-circle me-1"></i>
+                <span class="group-name">点击"同步分组"获取数据</span>
             </div>
         `;
+        groupsContainer.appendChild(emptyTag);
         return;
     }
 
-    let html = '';
-    allGroups.forEach(group => {
-        const actualCount = group.actual_count || 0;
-        const groupCount = group.group_count || 0;
-        const createdAt = group.created_at ? new Date(group.created_at).toLocaleDateString() : '未知';
+    // 对分组进行排序：按用户数量降序排列，用户数为0的排在最后
+    const sortedGroups = allGroups
+        .filter(group => group.group_id !== 0) // 跳过ID为0的分组，因为已经有默认的未分组标签
+        .sort((a, b) => {
+            const countA = a.actual_count || 0;
+            const countB = b.actual_count || 0;
 
-        html += `
-            <div class="group-card" id="group-${group.group_id}" onclick="selectGroup(${group.group_id})">
-                <div class="group-header">
-                    <h6 class="group-title">
-                        <i class="bi bi-collection me-2"></i>${group.group_name}
-                    </h6>
-                    <span class="group-count">${actualCount}</span>
-                </div>
-                <div class="group-stats">
-                    <span><i class="bi bi-person"></i> B站数量: ${groupCount}</span>
-                    <span><i class="bi bi-calendar3"></i> ${createdAt}</span>
-                </div>
-                <div class="group-actions">
-                    <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); editGroup(${group.group_id})">
-                        <i class="bi bi-pencil"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); deleteGroup(${group.group_id})">
-                        <i class="bi bi-trash"></i>
-                    </button>
-                </div>
+            // 如果都有用户或都没有用户，按数量降序
+            if ((countA > 0 && countB > 0) || (countA === 0 && countB === 0)) {
+                return countB - countA;
+            }
+            // 有用户的分组排在前面
+            return countA > 0 ? -1 : 1;
+        });
+
+    // 渲染排序后的分组
+    sortedGroups.forEach(group => {
+        const actualCount = group.actual_count || 0;
+
+        const groupTag = document.createElement('div');
+        groupTag.className = 'group-tag';
+        groupTag.id = `group-${group.group_id}`;
+        groupTag.onclick = () => selectGroup(group.group_id);
+
+        // 为空分组添加特殊样式
+        if (actualCount === 0) {
+            groupTag.classList.add('empty-group-tag');
+        }
+
+        groupTag.innerHTML = `
+            <div class="group-tag-content">
+                <i class="bi bi-collection me-1"></i>
+                <span class="group-name" title="${group.group_name}">${group.group_name}</span>
+                <span class="group-count-badge">${actualCount}</span>
             </div>
         `;
+
+        groupsContainer.appendChild(groupTag);
     });
 
-    groupsList.innerHTML = html;
+    // 更新分组统计信息
+    updateGroupsStats();
 }
 
 /**
@@ -149,14 +172,14 @@ function renderGroupsList() {
  */
 async function selectGroup(groupId) {
     // 移除之前的选中状态
-    document.querySelectorAll('.group-card').forEach(card => {
-        card.classList.remove('active');
+    document.querySelectorAll('.group-tag').forEach(tag => {
+        tag.classList.remove('active');
     });
 
     // 添加当前选中状态
-    const selectedCard = document.getElementById(`group-${groupId}`);
-    if (selectedCard) {
-        selectedCard.classList.add('active');
+    const selectedTag = document.getElementById(`group-${groupId}`);
+    if (selectedTag) {
+        selectedTag.classList.add('active');
     }
 
     currentGroupId = groupId;
@@ -234,6 +257,9 @@ function renderGroupUsers() {
     const usersList = document.getElementById('groupUsersList');
     if (!usersList) return;
 
+    // 设置视图模式类
+    usersList.className = `view-mode-${currentViewMode}`;
+
     if (currentGroupUsers.length === 0) {
         const groupName = currentGroupId === 0 ? '未分组' :
             (allGroups.find(g => g.group_id === currentGroupId)?.group_name || '该分组');
@@ -268,52 +294,14 @@ function renderGroupUsers() {
         const categoryTag = category !== '未分类' ?
             `<span class="badge bg-secondary me-1">${category}</span>` : '';
 
-        html += `
-            <div class="user-card ${isSelected ? 'selected' : ''}" data-uid="${user.uid}">
-                <div class="d-flex align-items-center">
-                    <div class="form-check me-3">
-                        <input class="form-check-input" type="checkbox" 
-                               ${isSelected ? 'checked' : ''} 
-                               onchange="toggleUserSelection(${user.uid})" />
-                    </div>
-                    <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
-                         onerror="this.src='/static/img/default-avatar.svg'" />
-                    <div class="user-info">
-                        <div class="user-name">
-                            ${user.uname}${vipBadge}${officialBadge}
-                        </div>
-                        <div class="user-sign">${user.sign || '这个人很懒，什么都没有留下'}</div>
-                        <div class="user-stats">
-                            <span><i class="bi bi-star"></i> LV${user.level || 0}</span>
-                            <span><i class="bi bi-calendar3"></i> 
-                                ${user.follow_time ? new Date(user.follow_time * 1000).toLocaleDateString() : '未知'}
-                            </span>
-                            ${categoryTag}
-                        </div>
-                    </div>
-                    <div class="ms-auto">
-                        <div class="dropdown">
-                            <button class="btn btn-outline-secondary btn-sm dropdown-toggle"
-                                type="button" data-bs-toggle="dropdown">
-                                操作
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><a class="dropdown-item" href="#" onclick="showMoveUserDialog(${user.uid})">
-                                    <i class="bi bi-arrow-right"></i> 移动到分组
-                                </a></li>
-                                <li><a class="dropdown-item" href="#" onclick="unfollowSingleUser(${user.uid})">
-                                    <i class="bi bi-person-dash"></i> 取消关注
-                                </a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="https://space.bilibili.com/${user.uid}" target="_blank">
-                                    <i class="bi bi-box-arrow-up-right"></i> 访问主页
-                                </a></li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
+        // 根据视图模式生成不同的HTML结构
+        if (currentViewMode === 'grid') {
+            html += renderUserCardGrid(user, isSelected, avatarUrl, vipBadge, officialBadge, categoryTag);
+        } else if (currentViewMode === 'compact') {
+            html += renderUserCardCompact(user, isSelected, avatarUrl, vipBadge, officialBadge, categoryTag);
+        } else {
+            html += renderUserCardDetailed(user, isSelected, avatarUrl, vipBadge, officialBadge, categoryTag);
+        }
     });
 
     usersList.innerHTML = html;
@@ -890,4 +878,188 @@ function onPageSizeChange() {
         currentPage = 1; // 重置到第一页
         loadGroupUsers();
     }
+}
+
+/**
+ * 渲染详细视图用户卡片
+ */
+function renderUserCardDetailed(user, isSelected, avatarUrl, vipBadge, officialBadge, categoryTag) {
+    return `
+        <div class="user-card ${isSelected ? 'selected' : ''}" data-uid="${user.uid}">
+            <div class="d-flex align-items-center">
+                <div class="form-check me-3">
+                    <input class="form-check-input" type="checkbox" 
+                           ${isSelected ? 'checked' : ''} 
+                           onchange="toggleUserSelection(${user.uid})" />
+                </div>
+                <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
+                     onerror="this.src='/static/img/default-avatar.svg'" />
+                <div class="user-info">
+                    <div class="user-name">
+                        ${user.uname}${vipBadge}${officialBadge}
+                    </div>
+                    <div class="user-sign">${user.sign || '这个人很懒，什么都没有留下'}</div>
+                    <div class="user-stats">
+                        <span><i class="bi bi-star"></i> LV${user.level || 0}</span>
+                        <span><i class="bi bi-calendar3"></i> 
+                            ${user.follow_time ? new Date(user.follow_time * 1000).toLocaleDateString() : '未知'}
+                        </span>
+                        ${categoryTag}
+                    </div>
+                </div>
+                <div class="ms-auto">
+                    ${renderUserActions(user.uid)}
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * 渲染宫格视图用户卡片
+ */
+function renderUserCardGrid(user, isSelected, avatarUrl, vipBadge, officialBadge, categoryTag) {
+    return `
+        <div class="user-card ${isSelected ? 'selected' : ''}" data-uid="${user.uid}">
+            <div class="form-check position-absolute top-0 start-0 m-3">
+                <input class="form-check-input" type="checkbox" 
+                       ${isSelected ? 'checked' : ''} 
+                       onchange="toggleUserSelection(${user.uid})" />
+            </div>
+            <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
+                 onerror="this.src='/static/img/default-avatar.svg'" />
+            <div class="user-info">
+                <div class="user-name">
+                    ${user.uname}${vipBadge}${officialBadge}
+                </div>
+                <div class="user-sign" style="max-height: 60px; overflow: hidden;">
+                    ${user.sign || '这个人很懒，什么都没有留下'}
+                </div>
+                <div class="user-stats">
+                    <span><i class="bi bi-star"></i> LV${user.level || 0}</span>
+                    <span><i class="bi bi-calendar3"></i> 
+                        ${user.follow_time ? new Date(user.follow_time * 1000).toLocaleDateString() : '未知'}
+                    </span>
+                    ${categoryTag}
+                </div>
+            </div>
+            <div class="mt-2">
+                ${renderUserActions(user.uid)}
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * 渲染紧凑视图用户卡片
+ */
+function renderUserCardCompact(user, isSelected, avatarUrl, vipBadge, officialBadge, categoryTag) {
+    return `
+        <div class="user-card ${isSelected ? 'selected' : ''}" data-uid="${user.uid}">
+            <div class="form-check me-2">
+                <input class="form-check-input" type="checkbox" 
+                       ${isSelected ? 'checked' : ''} 
+                       onchange="toggleUserSelection(${user.uid})" />
+            </div>
+            <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
+                 onerror="this.src='/static/img/default-avatar.svg'" />
+            <div class="user-info">
+                <div class="user-name">
+                    ${user.uname}${vipBadge}${officialBadge}
+                </div>
+                <div class="user-stats">
+                    <span><i class="bi bi-star"></i> LV${user.level || 0}</span>
+                    <span><i class="bi bi-calendar3"></i> 
+                        ${user.follow_time ? new Date(user.follow_time * 1000).toLocaleDateString() : '未知'}
+                    </span>
+                    ${categoryTag}
+                </div>
+            </div>
+            <div class="dropdown">
+                <button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                    <i class="bi bi-three-dots"></i>
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="showMoveUserDialog(${user.uid})">
+                        <i class="bi bi-arrow-right"></i> 移动到分组
+                    </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="unfollowSingleUser(${user.uid})">
+                        <i class="bi bi-person-dash"></i> 取消关注
+                    </a></li>
+                    <li><hr class="dropdown-divider"></li>
+                    <li><a class="dropdown-item" href="https://space.bilibili.com/${user.uid}" target="_blank">
+                        <i class="bi bi-box-arrow-up-right"></i> 访问主页
+                    </a></li>
+                </ul>
+            </div>
+        </div>
+    `;
+}
+
+/**
+ * 渲染用户操作菜单
+ */
+function renderUserActions(uid) {
+    return `
+        <div class="dropdown">
+            <button class="btn btn-outline-secondary btn-sm dropdown-toggle"
+                type="button" data-bs-toggle="dropdown">
+                操作
+            </button>
+            <ul class="dropdown-menu">
+                <li><a class="dropdown-item" href="#" onclick="showMoveUserDialog(${uid})">
+                    <i class="bi bi-arrow-right"></i> 移动到分组
+                </a></li>
+                <li><a class="dropdown-item" href="#" onclick="unfollowSingleUser(${uid})">
+                    <i class="bi bi-person-dash"></i> 取消关注
+                </a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item" href="https://space.bilibili.com/${uid}" target="_blank">
+                    <i class="bi bi-box-arrow-up-right"></i> 访问主页
+                </a></li>
+            </ul>
+        </div>
+    `;
+}
+
+/**
+ * 切换视图模式
+ */
+function changeViewMode(mode) {
+    currentViewMode = mode;
+    renderGroupUsers();
+
+    // 保存用户偏好
+    localStorage.setItem('groupsViewMode', mode);
+
+    showMessage(`已切换到${getViewModeName(mode)}`, 'info', 1000);
+}
+
+/**
+ * 获取视图模式名称
+ */
+function getViewModeName(mode) {
+    const names = {
+        'detailed': '详细视图',
+        'grid': '宫格视图',
+        'compact': '紧凑视图'
+    };
+    return names[mode] || '详细视图';
+}
+
+/**
+ * 更新分组统计信息
+ */
+function updateGroupsStats() {
+    const statsElement = document.getElementById('groupsStats');
+    if (!statsElement) return;
+
+    const totalGroups = allGroups.length;
+    const groupsWithUsers = allGroups.filter(g => (g.actual_count || 0) > 0).length;
+    const emptyGroups = totalGroups - groupsWithUsers;
+    const totalUsers = allGroups.reduce((sum, g) => sum + (g.actual_count || 0), 0);
+
+    statsElement.innerHTML = `
+        共 ${totalGroups} 个分组，${groupsWithUsers} 个有用户，${emptyGroups} 个空分组，总用户数 ${totalUsers}
+    `;
 } 

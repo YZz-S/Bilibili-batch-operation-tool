@@ -139,16 +139,98 @@
         z-index: 9999;
     }
 
-    .group-sidebar {
-        max-height: 70vh;
-        overflow-y: auto;
-        border-right: 1px solid #e0e0e0;
-        padding-right: 20px;
+    /* 横向分组布局样式 */
+    .groups-horizontal-container {
+        background: #f8f9fa;
+        border-radius: 10px;
+        padding: 15px;
+        border: 1px solid #e9ecef;
+        min-height: 80px;
+        max-height: none;
     }
 
-    .group-content {
-        min-height: 70vh;
-        padding-left: 20px;
+    .groups-scroll-wrapper {
+        overflow: visible;
+        padding-bottom: 5px;
+    }
+
+    .groups-horizontal {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 5px 0;
+    }
+
+    .group-tag {
+        background: white;
+        border: 2px solid #e9ecef;
+        border-radius: 25px;
+        padding: 8px 16px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+        min-width: fit-content;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    }
+
+    .group-tag:hover {
+        border-color: #007bff;
+        background: #f8f9ff;
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    .group-tag.active {
+        background: #007bff;
+        border-color: #007bff;
+        color: white;
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+    }
+
+    .group-tag-content {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 0.9rem;
+    }
+
+    .group-name {
+        font-weight: 500;
+    }
+
+    .group-count-badge {
+        background: rgba(0, 0, 0, 0.1);
+        color: inherit;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        min-width: 20px;
+        text-align: center;
+    }
+
+    .group-tag.active .group-count-badge {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+    }
+
+    .empty-group-tag {
+        opacity: 0.6;
+        order: 999;
+        /* 确保空分组显示在最后 */
+    }
+
+    .empty-group-tag:hover {
+        opacity: 0.8;
+    }
+
+    .empty-group-tag .group-count-badge {
+        background: rgba(156, 163, 175, 0.3);
+        color: #9ca3af;
+    }
+
+    .group-content-area {
+        min-height: 60vh;
     }
 
     .batch-actions {
@@ -188,6 +270,413 @@
     .stats-card:hover {
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    /* 用户视图模式样式 */
+    .view-mode-detailed .user-card {
+        display: flex;
+        align-items: start;
+        padding: 20px;
+        margin-bottom: 15px;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        background: white;
+        transition: all 0.3s ease;
+    }
+
+    .view-mode-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+        gap: 20px;
+    }
+
+    .view-mode-grid .user-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 12px;
+        background: white;
+        transition: all 0.3s ease;
+        height: fit-content;
+    }
+
+    .view-mode-grid .user-card.selected {
+        border-color: #007bff;
+        background: #f8f9ff;
+    }
+
+    .view-mode-grid .user-avatar {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 15px;
+    }
+
+    .view-mode-grid .user-info {
+        margin-left: 0;
+        width: 100%;
+    }
+
+    .view-mode-grid .user-stats {
+        justify-content: center;
+        flex-wrap: wrap;
+    }
+
+    .view-mode-compact .user-card {
+        display: flex;
+        align-items: center;
+        padding: 12px 15px;
+        margin-bottom: 8px;
+        border: 1px solid #f0f0f0;
+        border-radius: 8px;
+        background: white;
+        transition: all 0.2s ease;
+    }
+
+    .view-mode-compact .user-avatar {
+        width: 40px;
+        height: 40px;
+        margin-right: 12px;
+    }
+
+    .view-mode-compact .user-info {
+        margin-left: 0;
+        flex-grow: 1;
+    }
+
+    .view-mode-compact .user-name {
+        margin-bottom: 2px;
+        font-size: 0.95rem;
+    }
+
+    .view-mode-compact .user-sign {
+        display: none;
+    }
+
+    .view-mode-compact .user-stats {
+        font-size: 0.8rem;
+        gap: 10px;
+    }
+
+    .view-mode-compact .dropdown {
+        margin-left: auto;
+    }
+
+    /* 深色模式适配 */
+    @media (prefers-color-scheme: dark) {
+        .groups-horizontal-container {
+            background: #2d3748;
+            border-color: #4a5568;
+        }
+
+        .group-tag {
+            background: #4a5568;
+            border-color: #6b7280;
+            color: #e2e8f0;
+        }
+
+        .group-tag:hover {
+            border-color: #60a5fa;
+            background: #374151;
+        }
+
+        .group-tag.active {
+            background: #3b82f6;
+            border-color: #3b82f6;
+            color: white;
+        }
+
+        .group-count-badge {
+            background: rgba(255, 255, 255, 0.15);
+            color: inherit;
+        }
+
+        .group-tag.active .group-count-badge {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        .empty-group-tag .group-count-badge {
+            background: rgba(107, 114, 128, 0.3);
+            color: #6b7280;
+        }
+
+        /* 用户卡片深色模式 */
+        .view-mode-detailed .user-card,
+        .view-mode-grid .user-card,
+        .view-mode-compact .user-card {
+            background: #374151;
+            border-color: #4b5563;
+            color: #e5e7eb;
+        }
+
+        .view-mode-detailed .user-card:hover,
+        .view-mode-grid .user-card:hover,
+        .view-mode-compact .user-card:hover {
+            border-color: #60a5fa;
+            background: #4b5563;
+        }
+
+        .view-mode-detailed .user-card.selected,
+        .view-mode-grid .user-card.selected,
+        .view-mode-compact .user-card.selected {
+            border-color: #3b82f6;
+            background: #1e40af;
+        }
+
+        .user-name {
+            color: #f3f4f6;
+        }
+
+        .user-sign {
+            color: #d1d5db;
+        }
+
+        .user-stats {
+            color: #9ca3af;
+        }
+
+        .vip-badge {
+            background: linear-gradient(45deg, #ec4899, #f472b6);
+        }
+
+        .official-badge {
+            background: #3b82f6;
+        }
+
+        /* 批量操作面板深色模式 */
+        .batch-actions {
+            background: #374151;
+            border-color: #4b5563;
+        }
+
+        /* 空状态深色模式 */
+        .empty-group {
+            color: #9ca3af;
+        }
+
+        .empty-group i {
+            color: #6b7280;
+        }
+
+        /* 统计卡片深色模式 */
+        .stats-card .card {
+            background: #374151;
+            border-color: #4b5563;
+        }
+
+        .stats-card .card-title {
+            color: inherit;
+        }
+
+        .stats-card .card-text {
+            color: #d1d5db;
+        }
+
+        /* 加载遮罩深色模式 */
+        .loading-overlay {
+            background: rgba(31, 41, 55, 0.8);
+            color: #f3f4f6;
+        }
+
+        /* 模态框深色模式 */
+        .modal-content {
+            background: #374151;
+            border-color: #4b5563;
+            color: #f3f4f6;
+        }
+
+        .modal-header {
+            border-color: #4b5563;
+        }
+
+        .modal-footer {
+            border-color: #4b5563;
+        }
+    }
+
+    /* 手动深色模式类 - 为了兼容可能的手动切换 */
+    .dark-mode .groups-horizontal-container {
+        background: #2d3748;
+        border-color: #4a5568;
+    }
+
+    .dark-mode .group-tag {
+        background: #4a5568;
+        border-color: #6b7280;
+        color: #e2e8f0;
+    }
+
+    .dark-mode .group-tag:hover {
+        border-color: #60a5fa;
+        background: #374151;
+    }
+
+    .dark-mode .group-tag.active {
+        background: #3b82f6;
+        border-color: #3b82f6;
+        color: white;
+    }
+
+    .dark-mode .group-count-badge {
+        background: rgba(255, 255, 255, 0.15);
+        color: inherit;
+    }
+
+    .dark-mode .group-tag.active .group-count-badge {
+        background: rgba(255, 255, 255, 0.2);
+    }
+
+    .dark-mode .empty-group-tag .group-count-badge {
+        background: rgba(107, 114, 128, 0.3);
+        color: #6b7280;
+    }
+
+    .dark-mode .view-mode-detailed .user-card,
+    .dark-mode .view-mode-grid .user-card,
+    .dark-mode .view-mode-compact .user-card {
+        background: #374151;
+        border-color: #4b5563;
+        color: #e5e7eb;
+    }
+
+    .dark-mode .view-mode-detailed .user-card:hover,
+    .dark-mode .view-mode-grid .user-card:hover,
+    .dark-mode .view-mode-compact .user-card:hover {
+        border-color: #60a5fa;
+        background: #4b5563;
+    }
+
+    .dark-mode .view-mode-detailed .user-card.selected,
+    .dark-mode .view-mode-grid .user-card.selected,
+    .dark-mode .view-mode-compact .user-card.selected {
+        border-color: #3b82f6;
+        background: #1e40af;
+    }
+
+    .dark-mode .user-name {
+        color: #f3f4f6;
+    }
+
+    .dark-mode .user-sign {
+        color: #d1d5db;
+    }
+
+    .dark-mode .user-stats {
+        color: #9ca3af;
+    }
+
+    .dark-mode .vip-badge {
+        background: linear-gradient(45deg, #ec4899, #f472b6);
+    }
+
+    .dark-mode .official-badge {
+        background: #3b82f6;
+    }
+
+    .dark-mode .batch-actions {
+        background: #374151;
+        border-color: #4b5563;
+    }
+
+    .dark-mode .empty-group {
+        color: #9ca3af;
+    }
+
+    .dark-mode .empty-group i {
+        color: #6b7280;
+    }
+
+    /* 统计卡片深色模式 */
+    .dark-mode .stats-card .card {
+        background: #374151;
+        border-color: #4b5563;
+    }
+
+    .dark-mode .stats-card .card-title {
+        color: inherit;
+    }
+
+    .dark-mode .stats-card .card-text {
+        color: #d1d5db;
+    }
+
+    /* 加载遮罩深色模式 */
+    .dark-mode .loading-overlay {
+        background: rgba(31, 41, 55, 0.8);
+        color: #f3f4f6;
+    }
+
+    /* 模态框深色模式 */
+    .dark-mode .modal-content {
+        background: #374151;
+        border-color: #4b5563;
+        color: #f3f4f6;
+    }
+
+    .dark-mode .modal-header {
+        border-color: #4b5563;
+    }
+
+    .dark-mode .modal-footer {
+        border-color: #4b5563;
+    }
+
+    /* 响应式调整 */
+    @media (max-width: 1200px) {
+        .groups-horizontal {
+            gap: 8px;
+        }
+
+        .group-tag {
+            padding: 6px 12px;
+            font-size: 0.85rem;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .view-mode-grid {
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+
+        .groups-horizontal {
+            gap: 6px;
+        }
+
+        .group-tag {
+            padding: 5px 10px;
+            font-size: 0.8rem;
+        }
+
+        .group-tag-content {
+            gap: 4px;
+        }
+
+        .group-count-badge {
+            padding: 1px 6px;
+            font-size: 0.75rem;
+        }
+    }
+
+    @media (max-width: 480px) {
+        .groups-horizontal {
+            gap: 4px;
+        }
+
+        .group-tag {
+            padding: 4px 8px;
+            font-size: 0.75rem;
+        }
+
+        .group-name {
+            max-width: 80px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
     }
 </style>
 {% endblock %}
@@ -257,120 +746,137 @@
         </div>
     </div>
 
-    <!-- 主要内容区域 -->
-    <div class="row">
-        <!-- 分组侧边栏 -->
-        <div class="col-md-4">
-            <div class="group-sidebar">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5>分组列表</h5>
-                    <button class="btn btn-sm btn-outline-primary" onclick="createNewGroup()">
-                        <i class="bi bi-plus-lg"></i> 新建分组
-                    </button>
-                </div>
-
-                <!-- 搜索分组 -->
-                <div class="mb-3">
-                    <input type="text" class="form-control" id="groupSearchInput" placeholder="搜索分组..."
-                        onkeyup="searchGroups()">
-                </div>
-
-                <!-- 默认分组：未分组用户 -->
-                <div class="group-card" id="group-0" onclick="selectGroup(0)">
-                    <div class="group-header">
-                        <h6 class="group-title">
-                            <i class="bi bi-person-x me-2"></i>未分组用户
-                        </h6>
-                        <span class="group-count" id="ungrouped-count">0</span>
-                    </div>
-                    <div class="group-stats">
-                        <span><i class="bi bi-calendar3"></i> 默认分组</span>
-                    </div>
-                </div>
-
-                <!-- 分组列表 -->
-                <div id="groupsList">
-                    <!-- 分组卡片将在这里动态加载 -->
-                </div>
+    <!-- 分组列表区域 - 横向布局 -->
+    <div class="mb-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h5>分组列表</h5>
+                <small class="text-muted" id="groupsStats">加载中...</small>
+            </div>
+            <div class="d-flex gap-2">
+                <input type="text" class="form-control" id="groupSearchInput" placeholder="搜索分组..."
+                    style="width: 200px;" onkeyup="searchGroups()">
+                <button class="btn btn-sm btn-outline-primary" onclick="createNewGroup()">
+                    <i class="bi bi-plus-lg"></i> 新建分组
+                </button>
             </div>
         </div>
 
-        <!-- 分组内容区域 -->
-        <div class="col-md-8">
-            <div class="group-content">
-                <!-- 批量操作面板 -->
-                <div class="batch-actions" id="batchActions">
-                    <div class="row align-items-center">
-                        <div class="col-md-3">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="selectAllUsers"
-                                    onchange="toggleSelectAllUsers()">
-                                <label class="form-check-label" for="selectAllUsers">
-                                    全选 (<span id="selectedUsersCount">0</span>)
-                                </label>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <select class="form-select form-select-sm" id="batchGroupTarget">
-                                <option value="">选择目标分组</option>
-                                <!-- 分组选项将在这里动态加载 -->
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="btn-group" role="group">
-                                <button class="btn btn-primary btn-sm" onclick="batchMoveToGroup()">
-                                    <i class="bi bi-arrow-right"></i> 移动到分组
-                                </button>
-                                <button class="btn btn-danger btn-sm" onclick="batchUnfollowUsers()">
-                                    <i class="bi bi-person-dash"></i> 批量取关
-                                </button>
-                            </div>
+        <!-- 分组标签区域 -->
+        <div class="groups-horizontal-container">
+            <div class="groups-scroll-wrapper">
+                <div class="groups-horizontal" id="groupsHorizontal">
+                    <!-- 默认分组：未分组用户 -->
+                    <div class="group-tag" id="group-0" onclick="selectGroup(0)">
+                        <div class="group-tag-content">
+                            <i class="bi bi-person-x me-1"></i>
+                            <span class="group-name">未分组用户</span>
+                            <span class="group-count-badge" id="ungrouped-count">0</span>
                         </div>
                     </div>
+                    <!-- 分组标签将在这里动态加载 -->
                 </div>
-
-                <!-- 分组内容头部 -->
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div>
-                        <h5 id="groupContentTitle">选择一个分组查看用户</h5>
-                        <p class="text-muted" id="groupContentDescription">从左侧分组列表中选择一个分组</p>
-                    </div>
-                    <div id="groupContentActions" style="display: none;">
-                        <div class="d-flex gap-2">
-                            <div class="input-group">
-                                <input type="text" class="form-control" id="userSearchInput" placeholder="搜索用户..."
-                                    onkeyup="searchUsers()">
-                                <button class="btn btn-outline-primary" onclick="loadGroupUsers(true)">
-                                    <i class="bi bi-arrow-clockwise"></i>
-                                </button>
-                            </div>
-                            <select class="form-select" id="pageSizeSelect" style="width: 120px;"
-                                onchange="onPageSizeChange()">
-                                <option value="20">每页20个</option>
-                                <option value="50" selected>每页50个</option>
-                                <option value="100">每页100个</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 用户列表 -->
-                <div id="groupUsersList">
-                    <div class="empty-group">
-                        <i class="bi bi-collection"></i>
-                        <h5>选择一个分组开始管理</h5>
-                        <p>从左侧选择分组查看其中的关注用户</p>
-                    </div>
-                </div>
-
-                <!-- 分页 -->
-                <nav aria-label="Page navigation" class="mt-4">
-                    <ul class="pagination justify-content-center" id="usersPagination">
-                    </ul>
-                </nav>
             </div>
         </div>
     </div>
+
+    <!-- 分组内容区域 -->
+    <div class="group-content-area">
+        <div class="group-content">
+            <!-- 批量操作面板 -->
+            <div class="batch-actions" id="batchActions">
+                <div class="row align-items-center">
+                    <div class="col-md-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="selectAllUsers"
+                                onchange="toggleSelectAllUsers()">
+                            <label class="form-check-label" for="selectAllUsers">
+                                全选 (<span id="selectedUsersCount">0</span>)
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select form-select-sm" id="batchGroupTarget">
+                            <option value="">选择目标分组</option>
+                            <!-- 分组选项将在这里动态加载 -->
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-primary btn-sm" onclick="batchMoveToGroup()">
+                                <i class="bi bi-arrow-right"></i> 移动到分组
+                            </button>
+                            <button class="btn btn-danger btn-sm" onclick="batchUnfollowUsers()">
+                                <i class="bi bi-person-dash"></i> 批量取关
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 分组内容头部 -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <div>
+                    <h5 id="groupContentTitle">选择一个分组查看用户</h5>
+                    <p class="text-muted" id="groupContentDescription">从上方分组列表中选择一个分组</p>
+                </div>
+                <div id="groupContentActions" style="display: none;">
+                    <div class="d-flex gap-2 align-items-center">
+                        <!-- 视图模式切换 -->
+                        <div class="btn-group" role="group" aria-label="视图模式">
+                            <input type="radio" class="btn-check" name="viewMode" id="viewModeDetailed" value="detailed"
+                                checked onchange="changeViewMode('detailed')">
+                            <label class="btn btn-outline-primary btn-sm" for="viewModeDetailed" title="详细视图">
+                                <i class="bi bi-list-ul"></i>
+                            </label>
+
+                            <input type="radio" class="btn-check" name="viewMode" id="viewModeGrid" value="grid"
+                                onchange="changeViewMode('grid')">
+                            <label class="btn btn-outline-primary btn-sm" for="viewModeGrid" title="宫格视图">
+                                <i class="bi bi-grid-3x3-gap"></i>
+                            </label>
+
+                            <input type="radio" class="btn-check" name="viewMode" id="viewModeCompact" value="compact"
+                                onchange="changeViewMode('compact')">
+                            <label class="btn btn-outline-primary btn-sm" for="viewModeCompact" title="紧凑视图">
+                                <i class="bi bi-list"></i>
+                            </label>
+                        </div>
+
+                        <div class="input-group" style="width: 300px;">
+                            <input type="text" class="form-control" id="userSearchInput" placeholder="搜索用户..."
+                                onkeyup="searchUsers()">
+                            <button class="btn btn-outline-primary" onclick="loadGroupUsers(true)">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                        <select class="form-select" id="pageSizeSelect" style="width: 120px;"
+                            onchange="onPageSizeChange()">
+                            <option value="20">每页20个</option>
+                            <option value="50" selected>每页50个</option>
+                            <option value="100">每页100个</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 用户列表 -->
+            <div id="groupUsersList">
+                <div class="empty-group">
+                    <i class="bi bi-collection"></i>
+                    <h5>选择一个分组开始管理</h5>
+                    <p>从左侧选择分组查看其中的关注用户</p>
+                </div>
+            </div>
+
+            <!-- 分页 -->
+            <nav aria-label="Page navigation" class="mt-4">
+                <ul class="pagination justify-content-center" id="usersPagination">
+                </ul>
+            </nav>
+        </div>
+    </div>
+</div>
 </div>
 
 <!-- 加载遮罩 -->
@@ -407,26 +913,59 @@
             </div>
         </div>
     </div>
-</div>
-{% endblock %}
+    {% endblock %}
 
-{% block extra_js %}
-<script src="/static/js/groups.js"></script>
-<script>
-    // 页面加载完成后初始化
-    document.addEventListener('DOMContentLoaded', function () {
-        loadGroups();
-        updateStatistics();
+    {% block extra_js %}
+    <script src="/static/js/groups.js"></script>
+    <script>
+        // 深色模式相关功能
+        function initDarkMode() {
+            // 检测系统深色模式偏好
+            const darkModeMediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-        // 设置自动刷新（每2分钟检查一次）
-        setInterval(function () {
-            if (window.autoRefreshEnabled) {
-                updateStatistics();
+            // 应用深色模式
+            function applyDarkMode(isDark) {
+                if (isDark) {
+                    document.body.classList.add('dark-mode');
+                } else {
+                    document.body.classList.remove('dark-mode');
+                }
             }
-        }, 120000);
-    });
 
-    // 启用自动刷新
-    window.autoRefreshEnabled = true;
-</script>
-{% endblock %}
+            // 初始应用
+            applyDarkMode(darkModeMediaQuery.matches);
+
+            // 监听系统深色模式变化
+            darkModeMediaQuery.addEventListener('change', function (e) {
+                applyDarkMode(e.matches);
+            });
+        }
+
+        // 页面加载完成后初始化
+        document.addEventListener('DOMContentLoaded', function () {
+            // 初始化深色模式
+            initDarkMode();
+
+            // 恢复用户偏好的视图模式
+            const savedViewMode = localStorage.getItem('groupsViewMode') || 'detailed';
+            currentViewMode = savedViewMode;
+            const viewModeRadio = document.getElementById(`viewMode${savedViewMode.charAt(0).toUpperCase() + savedViewMode.slice(1)}`);
+            if (viewModeRadio) {
+                viewModeRadio.checked = true;
+            }
+
+            loadGroups();
+            updateStatistics();
+
+            // 设置自动刷新（每2分钟检查一次）
+            setInterval(function () {
+                if (window.autoRefreshEnabled) {
+                    updateStatistics();
+                }
+            }, 120000);
+        });
+
+        // 启用自动刷新
+        window.autoRefreshEnabled = true;
+    </script>
+    {% endblock %}
