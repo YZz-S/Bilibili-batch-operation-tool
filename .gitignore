@@ -65,3 +65,4 @@ Thumbs.db
 data/*.csv
 data/*.json
 data/cache/ 
+src/__init__.py
