@@ -422,19 +422,19 @@ async def update_user_group(request: GroupUpdateRequest, req: Request):
         db_manager = req.app.state.db_manager
         api = await get_bilibili_api()
         
-        # 同步到B站
+        # 先同步到B站
         bilibili_success = await api.modify_user_group(request.uid, request.group_id)
         
-        # 更新本地数据库
-        db_success = await db_manager.update_user_group(request.uid, request.group_id)
-        
-        if db_success:
-            message = "分组更新成功"
-            if not bilibili_success:
-                message += "（本地更新成功，B站同步失败）"
-            return {"message": message, "bilibili_synced": bilibili_success}
+        if bilibili_success:
+            # 只有B站同步成功时才更新本地数据库
+            db_success = await db_manager.update_user_group(request.uid, request.group_id)
+            if db_success:
+                return {"message": "分组更新成功", "bilibili_synced": True}
+            else:
+                logger.warning(f"B站同步成功但本地数据库更新失败，用户ID: {request.uid}")
+                return {"message": "B站同步成功，但本地数据库更新失败", "bilibili_synced": True}
         else:
-            raise HTTPException(status_code=400, detail="分组更新失败")
+            raise HTTPException(status_code=400, detail="B站分组更新失败，未更新本地数据")
     except Exception as e:
         logger.error(f"更新用户分组失败: {e}")
         raise HTTPException(status_code=500, detail="更新用户分组失败")
@@ -456,24 +456,31 @@ async def batch_update_user_group(request: BatchGroupUpdateRequest, req: Request
         
         for uid in request.uids:
             try:
-                # 同步到B站
+                # 先同步到B站
                 bilibili_success = await api.modify_user_group(uid, request.group_id)
-                if not bilibili_success:
-                    bilibili_sync_errors += 1
                 
-                # 更新本地数据库
-                db_success = await db_manager.update_user_group(uid, request.group_id)
-                
-                if db_success:
-                    success_count += 1
+                if bilibili_success:
+                    # 只有B站同步成功时才更新本地数据库
+                    db_success = await db_manager.update_user_group(uid, request.group_id)
+                    if db_success:
+                        success_count += 1
+                    else:
+                        error_count += 1
+                        logger.warning(f"用户 {uid} B站同步成功但本地数据库更新失败")
                 else:
+                    bilibili_sync_errors += 1
                     error_count += 1
+                    logger.warning(f"用户 {uid} B站分组更新失败")
             except Exception as e:
                 logger.error(f"批量更新用户 {uid} 分组时出错: {e}")
                 error_count += 1
         
+        message = f"批量分组更新完成：成功 {success_count}，失败 {error_count}"
+        if bilibili_sync_errors > 0:
+            message += f"，其中B站同步失败 {bilibili_sync_errors} 个"
+        
         return {
-            "message": f"批量分组更新完成：成功 {success_count}，失败 {error_count}",
+            "message": message,
             "success_count": success_count,
             "error_count": error_count,
             "bilibili_sync_errors": bilibili_sync_errors

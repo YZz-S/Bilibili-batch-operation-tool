@@ -36,6 +36,7 @@ class BilibiliAPI:
             "modify_relation": "https://api.bilibili.com/x/relation/modify",
             "follow_groups": "https://api.bilibili.com/x/relation/tags",
             "batch_modify": "https://api.bilibili.com/x/relation/batch/modify",
+            "move_to_group": "https://api.bilibili.com/x/relation/tags/addUsers",
             "user_videos": "https://api.bilibili.com/x/space/arc/search",
             "video_info": "https://api.bilibili.com/x/web-interface/view"
         }
@@ -192,7 +193,12 @@ class BilibiliAPI:
             "csrf": self._extract_csrf_token()
         }
         
-        result = await self._request("POST", self.endpoints["batch_modify"], data=data)
+        # 添加详细的调试日志
+        self.logger.debug(f"修改分组API请求 - URL: {self.endpoints['move_to_group']}")
+        self.logger.debug(f"修改分组API请求 - 数据: {data}")
+        
+        # 使用正确的移动到分组API端点
+        result = await self._request("POST", self.endpoints["move_to_group"], data=data)
         await asyncio.sleep(self.api_delay)
         
         if result is not None:
