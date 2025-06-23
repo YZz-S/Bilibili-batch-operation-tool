@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import asyncio
+from datetime import datetime
 
 from ..bilibili.api import get_bilibili_api
 from ..bilibili.analyzer import FollowingAnalyzer
@@ -419,6 +420,69 @@ async def get_group_following(
         raise HTTPException(status_code=500, detail="获取分组关注列表失败")
 
 
+@router.get("/groups-distribution")
+async def get_groups_distribution(req: Request):
+    """获取B站分组分布分析"""
+    try:
+        db_manager = req.app.state.db_manager
+        groups = await db_manager.get_follow_groups()
+        
+        # 构建分布数据
+        distribution = {}
+        for group in groups:
+            group_name = group.get('group_name', '未知分组')
+            # 使用实际用户数量，优先使用actual_count，其次是group_count
+            user_count = group.get('actual_count', 0) or group.get('group_count', 0)
+            if user_count > 0:
+                distribution[group_name] = user_count
+        
+        return {
+            "distribution": {
+                "category_distribution": distribution
+            },
+            "generated_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"获取分组分布失败: {e}")
+        raise HTTPException(status_code=500, detail="获取分组分布失败")
+
+
+@router.get("/groups-stats")
+async def get_groups_statistics(req: Request):
+    """获取B站分组统计信息"""
+    try:
+        db_manager = req.app.state.db_manager
+        
+        # 获取总用户数
+        total_count = await db_manager.get_following_count()
+        
+        # 获取分组信息
+        groups = await db_manager.get_follow_groups()
+        
+        # 计算已分组用户数（排除默认分组）
+        grouped_count = sum(
+            group.get('actual_count', 0) or group.get('group_count', 0)
+            for group in groups 
+            if group.get('group_id', 0) > 0
+        )
+        
+        # 获取VIP和认证用户统计
+        following_list = await db_manager.get_following_list()
+        vip_count = sum(1 for user in following_list if user.get('vip_type', 0) > 0)
+        official_count = sum(1 for user in following_list if user.get('official_type', -1) >= 0)
+        
+        return {
+            "total_count": total_count,
+            "grouped_count": grouped_count,
+            "vip_count": vip_count,
+            "official_count": official_count,
+            "total_groups": len([g for g in groups if g.get('group_id', 0) > 0])
+        }
+    except Exception as e:
+        logger.error(f"获取分组统计失败: {e}")
+        raise HTTPException(status_code=500, detail="获取分组统计失败")
+
+
 @router.post("/update-group")
 async def update_user_group(request: GroupUpdateRequest, req: Request):
     """更新用户分组"""
@@ -524,6 +588,14 @@ async def debug_data_status(req: Request):
         # 随机抽取一些用户数据检查
         sample_users = await db_manager.get_following_list(limit=5)
         
+        # 检查B站分组分布
+        distribution_data = {}
+        for group in groups:
+            group_name = group.get('group_name', '未知分组')
+            user_count = group.get('actual_count', 0) or group.get('group_count', 0)
+            if user_count > 0:
+                distribution_data[group_name] = user_count
+        
         return {
             "total_users": total_users,
             "total_groups": len(groups),
@@ -536,7 +608,9 @@ async def debug_data_status(req: Request):
                     "group_id": user.get('group_id'),
                     "category": user.get('category')
                 } for user in sample_users
-            ]
+            ],
+            "distribution_preview": distribution_data,
+            "groups_raw": groups  # 添加原始分组数据用于调试
         }
     except Exception as e:
         logger.error(f"获取调试数据失败: {e}")

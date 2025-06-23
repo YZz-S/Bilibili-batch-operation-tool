@@ -191,10 +191,24 @@
             </div>
         </div>
         <div class="col-md-3">
-            <select class="form-select" id="categoryFilter" onchange="filterByCategory()">
-                <option value="">全部分类</option>
-                <!-- 分类选项将在这里动态加载 -->
-            </select>
+            <div class="input-group">
+                <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"
+                    aria-expanded="false" id="categoryTypeBtn" title="点击切换分类类型">
+                    <i class="fas fa-robot"></i> 系统分类
+                </button>
+                <ul class="dropdown-menu">
+                    <li><a class="dropdown-item" href="#" onclick="switchCategoryType('system')">
+                            <i class="fas fa-robot me-2"></i>系统分类 <small class="text-muted">(智能分类)</small>
+                        </a></li>
+                    <li><a class="dropdown-item" href="#" onclick="switchCategoryType('bilibili')">
+                            <i class="fas fa-users me-2"></i>B站分组 <small class="text-muted">(用户分组)</small>
+                        </a></li>
+                </ul>
+                <select class="form-select" id="categoryFilter" onchange="filterByCategory()">
+                    <option value="">全部分类</option>
+                    <!-- 分类选项将在这里动态加载 -->
+                </select>
+            </div>
         </div>
         <div class="col-md-2">
             <select class="form-select" id="sortBy" onchange="sortUsers()">
@@ -337,6 +351,7 @@
     document.addEventListener('DOMContentLoaded', function () {
         loadFollowingList();
         loadCategories();
+        updateStatisticsLabels(); // 初始化统计标签
 
         // 设置自动刷新（每30秒检查一次）
         setInterval(function () {
@@ -348,5 +363,8 @@
 
     // 启用自动刷新
     window.autoRefreshEnabled = true;
+
+    // 使switchCategoryType函数全局可访问
+    window.switchCategoryType = switchCategoryType;
 </script>
 {% endblock %}

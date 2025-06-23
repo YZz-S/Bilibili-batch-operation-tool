@@ -223,36 +223,49 @@
             <button class="btn btn-success me-2" onclick="updateCategories()">
                 <i class="fas fa-tags"></i> 更新分类
             </button>
-            <button class="btn btn-primary" onclick="refreshAnalysis()">
+            <button class="btn btn-primary me-2" onclick="refreshAnalysis()">
                 <i class="fas fa-sync-alt"></i> 刷新分析
+            </button>
+            <button class="btn btn-outline-info" onclick="showDebugInfo()">
+                <i class="fas fa-bug"></i> 调试信息
             </button>
         </div>
     </div>
 
     <!-- 统计概览 -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="stat-box">
-                <div class="stat-number" id="totalFollowing">0</div>
-                <div class="stat-label">总关注数</div>
-            </div>
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>统计概览</h6>
+            <small class="text-muted" id="statsTypeIndicator">
+                <i class="fas fa-robot me-1"></i>系统分类数据
+            </small>
         </div>
-        <div class="col-md-3">
-            <div class="stat-box" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
-                <div class="stat-number" id="categorizedUsers">0</div>
-                <div class="stat-label">已分类用户</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="stat-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
-                <div class="stat-number" id="inactiveUsers">0</div>
-                <div class="stat-label">不活跃用户</div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="stat-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
-                <div class="stat-number" id="recommendCleanup">0</div>
-                <div class="stat-label">建议清理</div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="stat-box">
+                        <div class="stat-number" id="totalFollowing">0</div>
+                        <div class="stat-label">总关注数</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-box" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                        <div class="stat-number" id="categorizedUsers">0</div>
+                        <div class="stat-label" id="categorizedUsersLabel">已分类用户</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                        <div class="stat-number" id="inactiveUsers">0</div>
+                        <div class="stat-label">不活跃用户</div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                        <div class="stat-number" id="recommendCleanup">0</div>
+                        <div class="stat-label">建议清理</div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -262,7 +275,22 @@
         <!-- 分类分布 -->
         <div class="col-lg-6">
             <div class="analysis-card">
-                <h5><i class="fas fa-chart-pie"></i> 分类分布</h5>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5><i class="fas fa-chart-pie"></i> 分类分布</h5>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="分类类型">
+                        <input type="radio" class="btn-check" name="categoryType" id="systemCategory" value="system"
+                            checked autocomplete="off">
+                        <label class="btn btn-outline-primary" for="systemCategory" title="基于用户名和签名的智能分类">
+                            <i class="fas fa-robot"></i> 系统分类
+                        </label>
+
+                        <input type="radio" class="btn-check" name="categoryType" id="bilibiliGroups" value="bilibili"
+                            autocomplete="off">
+                        <label class="btn btn-outline-secondary" for="bilibiliGroups" title="用户在哔哩哔哩设置的分组">
+                            <i class="fas fa-users"></i> B站分组
+                        </label>
+                    </div>
+                </div>
                 <div class="chart-container">
                     <canvas id="categoryChart"></canvas>
                 </div>
@@ -341,6 +369,13 @@
     document.addEventListener('DOMContentLoaded', function () {
         loadAnalysisData();
 
+        // 监听分类类型切换
+        document.querySelectorAll('input[name="categoryType"]').forEach(radio => {
+            radio.addEventListener('change', function () {
+                loadAnalysisData();
+            });
+        });
+
         // 监听深色模式变化
         if (window.matchMedia) {
             const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -358,6 +393,14 @@
      */
     async function loadAnalysisData() {
         try {
+            // 获取当前选择的分类类型
+            const categoryType = document.querySelector('input[name="categoryType"]:checked')?.value || 'system';
+
+            // 根据分类类型选择不同的API
+            const distributionUrl = categoryType === 'bilibili'
+                ? '/api/bilibili/groups-distribution'
+                : '/api/analysis/distribution';
+
             // 并行加载所有数据
             const [
                 distributionData,
@@ -366,7 +409,7 @@
                 suggestionsData,
                 overviewData
             ] = await Promise.all([
-                fetch('/api/analysis/distribution').then(r => r.json()),
+                fetch(distributionUrl).then(r => r.json()),
                 fetch('/api/analysis/trends').then(r => r.json()),
                 fetch('/api/analysis/inactive').then(r => r.json()),
                 fetch('/api/analysis/cleanup-suggestions').then(r => r.json()),
@@ -374,11 +417,14 @@
             ]);
 
             // 更新统计数据
-            updateOverviewStats(overviewData, inactiveData, suggestionsData);
+            await updateOverviewStats(overviewData, inactiveData, suggestionsData);
 
             // 更新图表
             updateCategoryChart(distributionData.distribution);
             updateTrendChart(trendsData);
+
+            // 更新图表标题提示
+            updateChartTitle();
 
             // 更新洞察
             updateInsights(distributionData, trendsData, inactiveData);
@@ -398,36 +444,59 @@
     /**
      * 更新概览统计
      */
-    function updateOverviewStats(overview, inactive, suggestions) {
+    async function updateOverviewStats(overview, inactive, suggestions) {
+        const categoryType = document.querySelector('input[name="categoryType"]:checked')?.value || 'system';
+
         // 更新总关注数
         const totalFollowing = overview.total_following || 0;
         document.getElementById('totalFollowing').textContent = totalFollowing;
 
-        // 计算已分类用户数量：排除"其他"、空分类等
-        const categories = overview.categories || [];
-        const categorizedCount = categories.reduce((sum, cat) => {
-            const category = cat.category;
-            // 排除"其他"、空字符串、null、undefined等未有效分类的情况
-            if (category && category.trim() !== '' && category !== '其他' && category !== 'null') {
-                return sum + cat.count;
-            }
-            return sum;
-        }, 0);
-        document.getElementById('categorizedUsers').textContent = categorizedCount;
+        // 根据分类类型获取不同的统计数据
+        if (categoryType === 'bilibili') {
+            try {
+                const response = await fetch('/api/bilibili/groups-stats');
+                const groupsStats = await response.json();
 
-        // 更新不活跃用户数
+                if (response.ok) {
+                    document.getElementById('categorizedUsers').textContent = groupsStats.grouped_count || 0;
+                    document.getElementById('recommendCleanup').textContent = Math.max(0, totalFollowing - (groupsStats.grouped_count || 0));
+                } else {
+                    // 如果获取失败，使用默认值
+                    document.getElementById('categorizedUsers').textContent = 0;
+                    document.getElementById('recommendCleanup').textContent = totalFollowing;
+                }
+            } catch (error) {
+                console.error('获取B站分组统计失败:', error);
+                document.getElementById('categorizedUsers').textContent = 0;
+                document.getElementById('recommendCleanup').textContent = totalFollowing;
+            }
+        } else {
+            // 系统分类统计
+            const categories = overview.categories || [];
+            const categorizedCount = categories.reduce((sum, cat) => {
+                const category = cat.category;
+                // 排除"其他"、空字符串、null、undefined等未有效分类的情况
+                if (category && category.trim() !== '' && category !== '其他' && category !== 'null') {
+                    return sum + cat.count;
+                }
+                return sum;
+            }, 0);
+            document.getElementById('categorizedUsers').textContent = categorizedCount;
+
+            // 计算待处理数（建议清理的用户）
+            const uncategorizedCount = categories.reduce((sum, cat) => {
+                const category = cat.category;
+                // 包括"其他"、空字符串、null、undefined等未有效分类的情况
+                if (!category || category.trim() === '' || category === '其他' || category === 'null') {
+                    return sum + cat.count;
+                }
+                return sum;
+            }, 0);
+            document.getElementById('recommendCleanup').textContent = uncategorizedCount;
+        }
+
+        // 更新不活跃用户数（不受分类类型影响）
         document.getElementById('inactiveUsers').textContent = inactive.total_count || 0;
-
-        // 计算待处理数（建议清理的用户）
-        const uncategorizedCount = categories.reduce((sum, cat) => {
-            const category = cat.category;
-            // 包括"其他"、空字符串、null、undefined等未有效分类的情况
-            if (!category || category.trim() === '' || category === '其他' || category === 'null') {
-                return sum + cat.count;
-            }
-            return sum;
-        }, 0);
-        document.getElementById('recommendCleanup').textContent = uncategorizedCount;
     }
 
     /**
@@ -438,10 +507,48 @@
     }
 
     /**
+ * 更新图表标题提示
+ */
+    function updateChartTitle() {
+        const categoryType = document.querySelector('input[name="categoryType"]:checked')?.value || 'system';
+        const titleElement = document.querySelector('.analysis-card h5');
+        const labelElement = document.getElementById('categorizedUsersLabel');
+        const statsTypeIndicator = document.getElementById('statsTypeIndicator');
+
+        if (titleElement) {
+            const icon = titleElement.querySelector('i');
+            const iconHtml = icon ? icon.outerHTML + ' ' : '';
+
+            if (categoryType === 'bilibili') {
+                titleElement.innerHTML = iconHtml + '分组分布 <small class="text-muted">(B站用户分组)</small>';
+            } else {
+                titleElement.innerHTML = iconHtml + '分类分布 <small class="text-muted">(系统智能分类)</small>';
+            }
+        }
+
+        if (labelElement) {
+            if (categoryType === 'bilibili') {
+                labelElement.textContent = '已分组用户';
+            } else {
+                labelElement.textContent = '已分类用户';
+            }
+        }
+
+        if (statsTypeIndicator) {
+            if (categoryType === 'bilibili') {
+                statsTypeIndicator.innerHTML = '<i class="fas fa-users me-1"></i>B站分组数据';
+            } else {
+                statsTypeIndicator.innerHTML = '<i class="fas fa-robot me-1"></i>系统分类数据';
+            }
+        }
+    }
+
+    /**
      * 更新分类分布图表
      */
     function updateCategoryChart(distributionData) {
         const ctx = document.getElementById('categoryChart').getContext('2d');
+        const categoryType = document.querySelector('input[name="categoryType"]:checked')?.value || 'system';
 
         if (categoryChart) {
             categoryChart.destroy();
@@ -458,6 +565,20 @@
             // 兼容旧格式
             categories = Object.keys(distributionData || {});
             counts = Object.values(distributionData || {});
+        }
+
+        // 检查是否为B站分组且数据为空
+        if (categoryType === 'bilibili' && categories.length === 0) {
+            // 显示空数据提示
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.font = '16px Arial';
+            ctx.fillStyle = '#666';
+            ctx.textAlign = 'center';
+            ctx.fillText('暂无B站分组数据', ctx.canvas.width / 2, ctx.canvas.height / 2 - 20);
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#999';
+            ctx.fillText('请先同步关注列表以获取分组数据', ctx.canvas.width / 2, ctx.canvas.height / 2 + 10);
+            return;
         }
 
         const dark = isDarkMode();
@@ -817,6 +938,44 @@
      */
     function applySuggestion(index) {
         showNotification('建议功能开发中...', 'info');
+    }
+
+    /**
+     * 显示调试信息
+     */
+    async function showDebugInfo() {
+        try {
+            const response = await fetch('/api/bilibili/debug/data-status');
+            const debugData = await response.json();
+
+            if (response.ok) {
+                let debugText = `调试信息：\n\n`;
+                debugText += `总用户数: ${debugData.total_users}\n`;
+                debugText += `总分组数: ${debugData.total_groups}\n`;
+                debugText += `未分组用户: ${debugData.ungrouped_users}\n\n`;
+
+                debugText += `分组详情:\n`;
+                debugData.group_details.forEach(group => {
+                    debugText += `- ${group.group_name} (ID: ${group.group_id}): 存储数量=${group.stored_count}, 实际数量=${group.real_count}\n`;
+                });
+
+                debugText += `\nB站分组分布预览:\n`;
+                if (Object.keys(debugData.distribution_preview).length > 0) {
+                    Object.entries(debugData.distribution_preview).forEach(([name, count]) => {
+                        debugText += `- ${name}: ${count}\n`;
+                    });
+                } else {
+                    debugText += `暂无分组数据\n`;
+                }
+
+                alert(debugText);
+            } else {
+                showNotification('获取调试信息失败', 'error');
+            }
+        } catch (error) {
+            console.error('获取调试信息失败:', error);
+            showNotification('获取调试信息失败: ' + error.message, 'error');
+        }
     }
 
     /**

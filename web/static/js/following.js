@@ -13,6 +13,7 @@ let selectedUsers = new Set();
 let allUsers = [];
 let categories = [];
 let pageSize = 50; // 默认每页50个
+let currentCategoryType = 'system'; // 'system' 或 'bilibili'
 
 /**
  * 加载关注列表
@@ -26,13 +27,31 @@ async function loadFollowingList(silent = false) {
         const params = new URLSearchParams({
             page: currentPage,
             page_size: pageSize,
-            category: currentCategory,
             search: currentSearch,
             sort_by: currentSort,
             sort_order: currentSortOrder
         });
 
-        const response = await fetch(`/api/bilibili/following?${params}`);
+        // 根据分类类型添加不同的参数
+        if (currentCategoryType === 'bilibili') {
+            if (currentCategory) {
+                // 查找对应的group_id
+                const selectedGroup = categories.find(cat => cat.category === currentCategory);
+                if (selectedGroup && selectedGroup.group_id !== undefined) {
+                    params.append('group_id', selectedGroup.group_id);
+                }
+            }
+        } else {
+            if (currentCategory) {
+                params.append('category', currentCategory);
+            }
+        }
+
+        const endpoint = currentCategoryType === 'bilibili' && currentCategory
+            ? `/api/bilibili/groups/${categories.find(cat => cat.category === currentCategory)?.group_id || 0}/following`
+            : '/api/bilibili/following';
+
+        const response = await fetch(`${endpoint}?${params}`);
         const result = await response.json();
 
         if (response.ok) {
@@ -65,15 +84,67 @@ async function loadFollowingList(silent = false) {
  */
 async function loadCategories() {
     try {
-        const response = await fetch('/api/bilibili/categories');
+        const url = currentCategoryType === 'bilibili'
+            ? '/api/bilibili/groups'
+            : '/api/bilibili/categories';
+
+        const response = await fetch(url);
         const result = await response.json();
 
         if (response.ok) {
-            categories = result.categories || [];
+            if (currentCategoryType === 'bilibili') {
+                categories = (result.groups || []).map(group => ({
+                    category: group.group_name,
+                    count: group.user_count || group.count || 0,
+                    group_id: group.group_id
+                }));
+            } else {
+                categories = result.categories || [];
+            }
             renderCategoryOptions();
         }
     } catch (error) {
         console.error('加载分类失败:', error);
+    }
+}
+
+/**
+ * 切换分类类型
+ */
+function switchCategoryType(type) {
+    if (currentCategoryType === type) return;
+
+    currentCategoryType = type;
+    currentCategory = ''; // 重置当前分类筛选
+    currentPage = 1; // 重置页面
+
+    // 更新按钮显示
+    const btnElement = document.getElementById('categoryTypeBtn');
+    if (type === 'bilibili') {
+        btnElement.innerHTML = '<i class="fas fa-users"></i> B站分组';
+    } else {
+        btnElement.innerHTML = '<i class="fas fa-robot"></i> 系统分类';
+    }
+
+    // 更新统计卡片标签
+    updateStatisticsLabels();
+
+    // 重新加载数据
+    loadCategories();
+    loadFollowingList();
+}
+
+/**
+ * 更新统计卡片标签
+ */
+function updateStatisticsLabels() {
+    const categorizedLabel = document.querySelector('#categorizedCount').parentNode.querySelector('.card-text');
+    if (categorizedLabel) {
+        if (currentCategoryType === 'bilibili') {
+            categorizedLabel.textContent = '已分组';
+        } else {
+            categorizedLabel.textContent = '已分类';
+        }
     }
 }
 
@@ -256,13 +327,24 @@ async function updateStatistics() {
     }
 
     try {
-        // 从API获取准确的统计数据
-        const response = await fetch('/api/bilibili/statistics');
+        // 根据分类类型选择不同的API
+        const statsUrl = currentCategoryType === 'bilibili'
+            ? '/api/bilibili/groups-stats'
+            : '/api/bilibili/statistics';
+
+        const response = await fetch(statsUrl);
         if (response.ok) {
             const stats = await response.json();
 
             animateCountUpdate('totalCount', stats.total_count || 0);
-            animateCountUpdate('categorizedCount', stats.categorized_count || 0);
+
+            // 根据分类类型显示不同的统计信息
+            if (currentCategoryType === 'bilibili') {
+                animateCountUpdate('categorizedCount', stats.grouped_count || 0);
+            } else {
+                animateCountUpdate('categorizedCount', stats.categorized_count || 0);
+            }
+
             animateCountUpdate('vipCount', stats.vip_count || 0);
             animateCountUpdate('officialCount', stats.official_count || 0);
 
