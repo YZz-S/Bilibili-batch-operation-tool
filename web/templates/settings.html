@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}设置 - 哔哩哔哩关注列表管理工具{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>
+                <i class="bi bi-gear"></i>
+                系统设置
+            </h2>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- 哔哩哔哩配置 -->
+    <div class="col-lg-8 mb-4">
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-tv"></i>
+                    哔哩哔哩配置
+                </h5>
+            </div>
+            <div class="card-body">
+                <form id="bilibili-config-form">
+                    <div class="mb-3">
+                        <label for="cookie" class="form-label">
+                            Cookie <span class="text-danger">*</span>
+                        </label>
+                        <textarea class="form-control" id="cookie" rows="3" placeholder="请输入完整的Cookie字符串"></textarea>
+                        <div class="form-text">
+                            获取方法：登录bilibili.com，按F12打开开发者工具，在Network标签页刷新页面，找到第一个请求复制Cookie值
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check"></i>
+                        保存配置
+                    </button>
+                    <button type="button" class="btn btn-outline-info" onclick="testConnection()">
+                        <i class="bi bi-wifi"></i>
+                        测试连接
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- 状态信息 -->
+    <div class="col-lg-4 mb-4">
+        <div class="card shadow">
+            <div class="card-header">
+                <h5 class="mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    连接状态
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="connection-status" class="alert alert-secondary">
+                    <i class="bi bi-hourglass-split"></i>
+                    检查连接状态中...
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        checkConnectionStatus();
+    });
+
+    async function checkConnectionStatus() {
+        try {
+            const response = await fetch('/api/bilibili/status');
+            const data = await response.json();
+
+            const statusElement = document.getElementById('connection-status');
+
+            if (data.configured && data.cookie_valid) {
+                statusElement.className = 'alert alert-success';
+                statusElement.innerHTML = '<i class="bi bi-check-circle"></i> 连接正常';
+            } else {
+                statusElement.className = 'alert alert-danger';
+                statusElement.innerHTML = '<i class="bi bi-x-circle"></i> 未配置Cookie';
+            }
+        } catch (error) {
+            const statusElement = document.getElementById('connection-status');
+            statusElement.className = 'alert alert-danger';
+            statusElement.innerHTML = '<i class="bi bi-x-circle"></i> 连接失败';
+        }
+    }
+
+    async function testConnection() {
+        showMessage('连接测试功能开发中...', 'info');
+    }
+</script>
+{% endblock %}

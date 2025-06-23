@@ -1,0 +1,579 @@
+{% extends "base.html" %}
+
+{% block title %}数据分析{% endblock %}
+
+{% block extra_css %}
+<style>
+    .analysis-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        transition: transform 0.3s ease;
+    }
+
+    .analysis-card:hover {
+        transform: translateY(-2px);
+    }
+
+    .chart-container {
+        position: relative;
+        height: 350px;
+        margin-bottom: 20px;
+    }
+
+    .stat-box {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 20px;
+        text-align: center;
+        margin-bottom: 20px;
+    }
+
+    .stat-number {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .stat-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+    }
+
+    .insight-item {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        border-left: 4px solid #007bff;
+    }
+
+    .insight-icon {
+        color: #007bff;
+        margin-right: 10px;
+    }
+
+    .inactive-user {
+        display: flex;
+        align-items: center;
+        padding: 10px;
+        background: white;
+        border-radius: 8px;
+        margin-bottom: 10px;
+        border: 1px solid #e0e0e0;
+    }
+
+    .inactive-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        margin-right: 10px;
+    }
+
+    .inactive-info {
+        flex-grow: 1;
+    }
+
+    .inactive-name {
+        font-weight: bold;
+        margin-bottom: 2px;
+    }
+
+    .inactive-reason {
+        color: #666;
+        font-size: 0.8em;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 5px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-chart-line"></i> 数据分析</h2>
+            <p class="text-muted">深入分析您的关注列表，发现有价值的洞察</p>
+        </div>
+        <div>
+            <button class="btn btn-primary" onclick="refreshAnalysis()">
+                <i class="fas fa-sync-alt"></i> 刷新分析
+            </button>
+            <button class="btn btn-success" onclick="exportReport()">
+                <i class="fas fa-download"></i> 导出报告
+            </button>
+        </div>
+    </div>
+
+    <!-- 统计概览 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="stat-box">
+                <div class="stat-number" id="totalFollowing">0</div>
+                <div class="stat-label">总关注数</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box" style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);">
+                <div class="stat-number" id="categorizedUsers">0</div>
+                <div class="stat-label">已分类用户</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box" style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);">
+                <div class="stat-number" id="inactiveUsers">0</div>
+                <div class="stat-label">不活跃用户</div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stat-box" style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);">
+                <div class="stat-number" id="recommendCleanup">0</div>
+                <div class="stat-label">建议清理</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 分析图表 -->
+    <div class="row">
+        <!-- 分类分布 -->
+        <div class="col-lg-6">
+            <div class="analysis-card">
+                <h5><i class="fas fa-chart-pie"></i> 分类分布</h5>
+                <div class="chart-container">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- 关注趋势 -->
+        <div class="col-lg-6">
+            <div class="analysis-card">
+                <h5><i class="fas fa-chart-line"></i> 关注趋势</h5>
+                <div class="chart-container">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- 智能洞察 -->
+        <div class="col-lg-6">
+            <div class="analysis-card">
+                <h5><i class="fas fa-lightbulb"></i> 智能洞察</h5>
+                <div id="insights">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div class="mt-2">分析中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 不活跃用户 -->
+        <div class="col-lg-6">
+            <div class="analysis-card">
+                <h5><i class="fas fa-user-times"></i> 不活跃用户</h5>
+                <div id="inactiveUsersList" style="max-height: 350px; overflow-y: auto;">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-warning" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div class="mt-2">检测中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 清理建议 -->
+    <div class="row">
+        <div class="col-12">
+            <div class="analysis-card">
+                <h5><i class="fas fa-broom"></i> 清理建议</h5>
+                <div id="cleanupSuggestions">
+                    <div class="text-center py-3">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <div class="mt-2">生成建议中...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // 全局变量
+    let categoryChart, trendChart;
+
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function () {
+        loadAnalysisData();
+    });
+
+    /**
+     * 加载分析数据
+     */
+    async function loadAnalysisData() {
+        try {
+            // 并行加载所有数据
+            const [
+                distributionData,
+                trendsData,
+                inactiveData,
+                suggestionsData,
+                overviewData
+            ] = await Promise.all([
+                fetch('/api/analysis/distribution').then(r => r.json()),
+                fetch('/api/analysis/trends').then(r => r.json()),
+                fetch('/api/analysis/inactive').then(r => r.json()),
+                fetch('/api/analysis/cleanup-suggestions').then(r => r.json()),
+                fetch('/api/data/stats/overview').then(r => r.json())
+            ]);
+
+            // 更新统计数据
+            updateOverviewStats(overviewData, inactiveData, suggestionsData);
+
+            // 更新图表
+            updateCategoryChart(distributionData.distribution);
+            updateTrendChart(trendsData.trends);
+
+            // 更新洞察
+            updateInsights(distributionData, trendsData, inactiveData);
+
+            // 更新不活跃用户列表
+            updateInactiveUsers(inactiveData.inactive_users || []);
+
+            // 更新清理建议
+            updateCleanupSuggestions(suggestionsData.suggestions || []);
+
+        } catch (error) {
+            console.error('加载分析数据失败:', error);
+            showNotification('加载分析数据失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 更新概览统计
+     */
+    function updateOverviewStats(overview, inactive, suggestions) {
+        document.getElementById('totalFollowing').textContent = overview.total_following || 0;
+        document.getElementById('categorizedUsers').textContent = overview.categories?.length || 0;
+        document.getElementById('inactiveUsers').textContent = inactive.total_count || 0;
+        document.getElementById('recommendCleanup').textContent = suggestions.suggestions?.length || 0;
+    }
+
+    /**
+     * 更新分类分布图表
+     */
+    function updateCategoryChart(distribution) {
+        const ctx = document.getElementById('categoryChart').getContext('2d');
+
+        if (categoryChart) {
+            categoryChart.destroy();
+        }
+
+        const categories = Object.keys(distribution || {});
+        const counts = Object.values(distribution || {});
+
+        categoryChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: categories,
+                datasets: [{
+                    data: counts,
+                    backgroundColor: [
+                        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+                        '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF',
+                        '#4BC0C0', '#FF6384'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = ((context.parsed / total) * 100).toFixed(1);
+                                return `${context.label}: ${context.parsed} (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * 更新趋势图表
+     */
+    function updateTrendChart(trends) {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+
+        if (trendChart) {
+            trendChart.destroy();
+        }
+
+        const months = Object.keys(trends || {});
+        const counts = Object.values(trends || {});
+
+        trendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: months,
+                datasets: [{
+                    label: '关注数量',
+                    data: counts,
+                    borderColor: '#36A2EB',
+                    backgroundColor: 'rgba(54, 162, 235, 0.1)',
+                    borderWidth: 3,
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /**
+     * 更新智能洞察
+     */
+    function updateInsights(distribution, trends, inactive) {
+        const insightsContainer = document.getElementById('insights');
+        let insights = [];
+
+        // 生成洞察
+        const totalUsers = Object.values(distribution.distribution || {}).reduce((a, b) => a + b, 0);
+        const inactiveCount = inactive.total_count || 0;
+
+        if (inactiveCount > totalUsers * 0.3) {
+            insights.push({
+                icon: 'exclamation-triangle',
+                text: `检测到 ${inactiveCount} 个不活跃用户，占总数的 ${((inactiveCount / totalUsers) * 100).toFixed(1)}%，建议进行清理。`,
+                type: 'warning'
+            });
+        }
+
+        const categories = Object.keys(distribution.distribution || {});
+        const maxCategory = categories.reduce((a, b) =>
+            (distribution.distribution[a] || 0) > (distribution.distribution[b] || 0) ? a : b
+        );
+
+        if (maxCategory) {
+            insights.push({
+                icon: 'star',
+                text: `您最关注的类型是"${maxCategory}"，共有 ${distribution.distribution[maxCategory]} 个用户。`,
+                type: 'info'
+            });
+        }
+
+        // 渲染洞察
+        let html = '';
+        insights.forEach(insight => {
+            html += `
+            <div class="insight-item">
+                <i class="fas fa-${insight.icon} insight-icon"></i>
+                ${insight.text}
+            </div>
+        `;
+        });
+
+        if (html === '') {
+            html = '<div class="text-center text-muted py-3">暂无特殊洞察</div>';
+        }
+
+        insightsContainer.innerHTML = html;
+    }
+
+    /**
+     * 更新不活跃用户列表
+     */
+    function updateInactiveUsers(users) {
+        const container = document.getElementById('inactiveUsersList');
+
+        if (!users || users.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted py-3">暂无不活跃用户</div>';
+            return;
+        }
+
+        let html = '';
+        users.slice(0, 10).forEach(user => { // 只显示前10个
+            const avatarUrl = user.face && user.face.trim() !== '' ?
+                (user.face.startsWith('http') ? user.face : 'https:' + user.face) :
+                '/static/img/default-avatar.svg';
+
+            html += `
+            <div class="inactive-user">
+                <img src="${avatarUrl}" 
+                     alt="${user.uname}" class="inactive-avatar"
+                     onerror="this.src='/static/img/default-avatar.svg'">
+                <div class="inactive-info">
+                    <div class="inactive-name">${user.uname}</div>
+                    <div class="inactive-reason">长期未更新内容</div>
+                </div>
+                <div class="action-buttons">
+                    <button class="btn btn-sm btn-outline-danger" onclick="unfollowUser(${user.uid})">
+                        取消关注
+                    </button>
+                </div>
+            </div>
+        `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    /**
+     * 更新清理建议
+     */
+    function updateCleanupSuggestions(suggestions) {
+        const container = document.getElementById('cleanupSuggestions');
+
+        if (!suggestions || suggestions.length === 0) {
+            container.innerHTML = '<div class="text-center text-muted py-3">暂无清理建议</div>';
+            return;
+        }
+
+        let html = '<div class="row">';
+        suggestions.forEach((suggestion, index) => {
+            html += `
+            <div class="col-md-6 mb-3">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="card-title">
+                            <i class="fas fa-lightbulb text-warning"></i>
+                            ${suggestion.title || '清理建议'}
+                        </h6>
+                        <p class="card-text">${suggestion.description || suggestion}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <small class="text-muted">影响: ${suggestion.impact || '中等'}</small>
+                            <button class="btn btn-sm btn-outline-primary" onclick="applySuggestion(${index})">
+                                执行建议
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        });
+        html += '</div>';
+
+        container.innerHTML = html;
+    }
+
+    /**
+     * 刷新分析
+     */
+    async function refreshAnalysis() {
+        showNotification('正在刷新分析数据...', 'info');
+        await loadAnalysisData();
+        showNotification('分析数据已更新', 'success');
+    }
+
+    /**
+     * 导出报告
+     */
+    async function exportReport() {
+        try {
+            const response = await fetch('/api/analysis/report');
+            const result = await response.json();
+
+            if (response.ok) {
+                // 创建下载链接
+                const dataStr = JSON.stringify(result, null, 2);
+                const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(dataBlob);
+
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `bilibili_analysis_report_${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+
+                URL.revokeObjectURL(url);
+                showNotification('报告导出成功', 'success');
+            } else {
+                throw new Error(result.message || '导出失败');
+            }
+        } catch (error) {
+            console.error('导出报告失败:', error);
+            showNotification('导出报告失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 取消关注用户
+     */
+    async function unfollowUser(uid) {
+        if (!confirm('确定要取消关注这个用户吗？')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/bilibili/unfollow', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ uids: [uid] })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showNotification('取消关注成功', 'success');
+                loadAnalysisData(); // 重新加载数据
+            } else {
+                throw new Error(result.message || '取消关注失败');
+            }
+        } catch (error) {
+            console.error('取消关注失败:', error);
+            showNotification('取消关注失败: ' + error.message, 'error');
+        }
+    }
+
+    /**
+     * 应用建议
+     */
+    function applySuggestion(index) {
+        showNotification('建议功能开发中...', 'info');
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{
+    "bilibili": {
+        "cookie": "请在此处填入您的哔哩哔哩Cookie",
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "api_delay": 1.0,
+        "retry_times": 3,
+        "timeout": 30
+    },
+    "database": {
+        "path": "data/bilibili.db",
+        "backup_enabled": true,
+        "backup_interval": 24
+    },
+    "server": {
+        "host": "127.0.0.1",
+        "port": 8080,
+        "debug": false
+    },
+    "logging": {
+        "level": "INFO",
+        "file_path": "logs/app.log",
+        "max_file_size": "10MB",
+        "backup_count": 5
+    },
+    "analysis": {
+        "cache_enabled": true,
+        "cache_duration": 3600,
+        "batch_size": 50
+    },
+    "ui": {
+        "theme": "light",
+        "language": "zh-CN",
+        "items_per_page": 20
+    }
+}

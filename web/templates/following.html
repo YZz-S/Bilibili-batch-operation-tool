@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+
+{% block title %}关注列表管理{% endblock %}
+
+{% block extra_css %}
+<style>
+    .user-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+    }
+
+    .user-card:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-color: #007bff;
+    }
+
+    .user-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .user-info {
+        flex-grow: 1;
+        margin-left: 15px;
+    }
+
+    .user-name {
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 5px;
+    }
+
+    .user-sign {
+        color: #666;
+        font-size: 0.9em;
+        margin-bottom: 8px;
+        max-height: 40px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .user-stats {
+        display: flex;
+        gap: 15px;
+        font-size: 0.85em;
+        color: #888;
+    }
+
+    .vip-badge {
+        background: linear-gradient(45deg, #ff6b9d, #ff9999);
+        color: white;
+        font-size: 0.7em;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 5px;
+    }
+
+    .official-badge {
+        background: #1890ff;
+        color: white;
+        font-size: 0.7em;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 5px;
+    }
+
+    .category-tag {
+        background: #f0f0f0;
+        color: #666;
+        font-size: 0.8em;
+        padding: 3px 8px;
+        border-radius: 12px;
+        margin-right: 5px;
+    }
+
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    .batch-actions {
+        position: sticky;
+        top: 20px;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="fas fa-users"></i> 关注列表管理</h2>
+            <p class="text-muted">管理您的哔哩哔哩关注列表，支持批量操作和智能分类</p>
+        </div>
+        <div>
+            <button class="btn btn-primary" onclick="syncFollowing()">
+                <i class="fas fa-sync-alt"></i> 同步关注列表
+            </button>
+            <button class="btn btn-success" onclick="autoCategories()">
+                <i class="fas fa-magic"></i> 智能分类
+            </button>
+        </div>
+    </div>
+
+    <!-- 搜索和筛选 -->
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <div class="input-group">
+                <input type="text" class="form-control" id="searchInput" placeholder="搜索用户名或签名...">
+                <button class="btn btn-primary" onclick="searchUsers()">
+                    <i class="fas fa-search"></i> 搜索
+                </button>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <select class="form-select" id="categoryFilter" onchange="filterByCategory()">
+                <option value="">全部分类</option>
+                <!-- 分类选项将在这里动态加载 -->
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" id="sortBy" onchange="sortUsers()">
+                <option value="follow_time">关注时间</option>
+                <option value="uname">用户名</option>
+                <option value="level">等级</option>
+                <option value="vip_type">VIP类型</option>
+                <option value="category">分类</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select class="form-select" id="sortOrder" onchange="sortUsers()">
+                <option value="desc">降序</option>
+                <option value="asc">升序</option>
+            </select>
+        </div>
+        <div class="col-md-1">
+            <button class="btn btn-outline-secondary" onclick="loadFollowingList()" title="刷新">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- 批量操作面板 -->
+    <div class="card mb-4" id="batchOperations" style="display: none;">
+        <div class="card-body">
+            <div class="row align-items-center">
+                <div class="col-md-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="selectAll" onchange="toggleSelectAll()">
+                        <label class="form-check-label" for="selectAll">
+                            全选 (<span id="selectedCount">0</span>)
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-success btn-sm" onclick="syncFollowing()">
+                            <i class="fas fa-sync"></i> 同步关注列表
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="autoCategories()">
+                            <i class="fas fa-magic"></i> 自动分类
+                        </button>
+                        <button class="btn btn-warning btn-sm" onclick="batchUpdateCategory()">
+                            <i class="fas fa-tags"></i> 批量分类
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="batchUnfollow()">
+                            <i class="fas fa-user-minus"></i> 批量取关
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 统计信息 -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-primary" id="totalCount">0</h5>
+                    <p class="card-text">总关注数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-success" id="categorizedCount">0</h5>
+                    <p class="card-text">已分类</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-warning" id="vipCount">0</h5>
+                    <p class="card-text">VIP用户</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center">
+                <div class="card-body">
+                    <h5 class="card-title text-info" id="officialCount">0</h5>
+                    <p class="card-text">认证用户</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 用户列表 -->
+    <div id="userList">
+        <!-- 用户卡片将在这里动态加载 -->
+    </div>
+
+    <!-- 分页 -->
+    <nav aria-label="Page navigation" class="mt-4">
+        <ul class="pagination justify-content-center" id="pagination">
+        </ul>
+    </nav>
+</div>
+
+<!-- 加载遮罩 -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="text-center">
+        <div class="spinner-border text-primary mb-3" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div>正在处理中...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/following.js"></script>
+<script>
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function () {
+        loadFollowingList();
+        loadCategories();
+
+        // 设置自动刷新（每30秒检查一次）
+        setInterval(function () {
+            if (window.autoRefreshEnabled) {
+                loadFollowingList(true); // 静默刷新
+            }
+        }, 30000);
+    });
+
+    // 启用自动刷新
+    window.autoRefreshEnabled = true;
+</script>
+{% endblock %}
