@@ -404,6 +404,124 @@ class BilibiliAPI:
         
         return result
 
+    async def get_user_videos(self, uid: int, pn: int = 1, ps: int = 30) -> Optional[Dict[str, Any]]:
+        """获取用户视频列表"""
+        params = {
+            "mid": uid,
+            "pn": pn,  # 页码
+            "ps": ps,  # 每页数量
+            "order": "pubdate",  # 按发布时间排序
+        }
+        
+        url = f"{self.endpoints['user_videos']}?{urlencode(params)}"
+        
+        self.logger.debug(f"获取用户视频列表 - UID: {uid}, 页码: {pn}")
+        result = await self._request("GET", url)
+        
+        # 添加API延迟
+        await asyncio.sleep(self.api_delay)
+        
+        return result
+    
+    async def get_user_stats(self, uid: int) -> Optional[Dict[str, Any]]:
+        """获取用户真实统计信息（包括粉丝数、关注数、视频数等）"""
+        try:
+            # 1. 获取用户基本信息
+            user_info = await self.get_user_info(uid)
+            if not user_info:
+                self.logger.warning(f"用户 {uid} API响应为空")
+                return None
+            
+            # B站API可能返回不同格式的数据，需要兼容处理
+            card_info = {}
+            archive_count = 0
+            
+            if 'data' in user_info:
+                # 格式1: 标准API响应格式
+                data = user_info['data']
+                if not data:
+                    self.logger.warning(f"用户 {uid} 可能不存在或已注销")
+                    return None
+                card_info = data.get('card', {})
+            elif 'card' in user_info:
+                # 格式2: 直接包含card信息的格式
+                card_info = user_info.get('card', {})
+                archive_count = user_info.get('archive_count', 0)
+            else:
+                self.logger.warning(f"用户 {uid} 响应格式未知: {list(user_info.keys())}")
+                return None
+            
+            # 2. 获取用户视频列表（第一页，用于获取总数和最新视频时间）
+            videos_info = await self.get_user_videos(uid, pn=1, ps=1)
+            
+            # 提取统计信息
+            stats = {
+                "uid": uid,
+                "fans_count": card_info.get('fans', 0),  # 粉丝数
+                "following_count": card_info.get('friend', 0),  # 关注数
+                "video_count": 0,
+                "total_views": 0,
+                "last_video_time": 0,
+                "activity_score": 0.5  # 默认活跃度
+            }
+            
+            # 处理视频信息
+            # 首先尝试从用户信息中直接获取视频数量
+            if archive_count > 0:
+                stats["video_count"] = archive_count
+            
+            # 然后尝试从视频列表API获取详细信息
+            if videos_info and 'data' in videos_info and videos_info['data']:
+                video_data = videos_info['data']
+                
+                # 如果之前没有获取到视频数量，从这里获取
+                if stats["video_count"] == 0:
+                    stats["video_count"] = video_data.get('page', {}).get('count', 0)
+                
+                # 最新视频信息
+                vlist = video_data.get('list', {}).get('vlist', [])
+                if vlist:
+                    latest_video = vlist[0]  # 第一个是最新的
+                    stats["last_video_time"] = latest_video.get('created', 0)
+                    stats["total_views"] = sum(v.get('play', 0) for v in vlist)
+            
+            # 如果无法获取视频列表但有视频数量，使用估算的活跃度
+            elif stats["video_count"] > 0:
+                # 无法获取最新视频时间，使用保守的活跃度
+                stats["activity_score"] = 0.4  # 中等活跃度
+                
+                # 计算活跃度分数（基于视频数量、发布频率等）
+                if stats["video_count"] > 0:
+                    import time
+                    current_time = int(time.time())
+                    
+                    # 基于最后视频时间计算活跃度
+                    if stats["last_video_time"] > 0:
+                        days_since_last = (current_time - stats["last_video_time"]) / (24 * 3600)
+                        if days_since_last <= 7:
+                            activity_score = 0.9
+                        elif days_since_last <= 30:
+                            activity_score = 0.7
+                        elif days_since_last <= 90:
+                            activity_score = 0.5
+                        else:
+                            activity_score = 0.3
+                        
+                        # 根据视频数量调整
+                        if stats["video_count"] > 100:
+                            activity_score += 0.1
+                        elif stats["video_count"] < 10:
+                            activity_score -= 0.1
+                        
+                        stats["activity_score"] = max(0.1, min(0.9, activity_score))
+            
+            self.logger.info(f"✅ 用户 {uid} 统计信息获取成功: 粉丝{stats['fans_count']}, 视频{stats['video_count']}, 活跃度{stats['activity_score']}")
+            return stats
+            
+        except Exception as e:
+            self.logger.error(f"获取用户 {uid} 统计信息失败: {e}")
+            return None
+
 
 # 全局API实例
 _bilibili_api = BilibiliAPI()

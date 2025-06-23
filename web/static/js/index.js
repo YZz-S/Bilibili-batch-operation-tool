@@ -468,7 +468,191 @@ async function generateReport() {
     }
 }
 
+/**
+ * 显示所有不活跃用户
+ */
+async function showAllInactiveUsers() {
+    try {
+        // 显示弹窗
+        const modal = new bootstrap.Modal(document.getElementById('inactiveUsersModal'));
+        modal.show();
+
+        // 获取当前的忽略未分组设置
+        const ignoreUngrouped = document.getElementById('ignoreUngroupedToggle')?.checked || false;
+
+        // 加载数据
+        const response = await fetch(`/api/analysis/inactive/all?ignore_ungrouped=${ignoreUngrouped}`);
+        const result = await response.json();
+
+        if (response.ok) {
+            // 更新统计信息
+            document.getElementById('modalInactiveCount').textContent = result.total_count;
+            document.getElementById('modalTotalCount').textContent = result.total_following;
+            document.getElementById('modalInactivePercentage').textContent = result.inactive_percentage + '%';
+
+            // 更新检测标准
+            if (result.criteria) {
+                document.getElementById('modalInactiveCriteria').innerHTML = `
+                    • 主要标准：${result.criteria.primary}<br>
+                    • 辅助标准：${result.criteria.secondary}<br>
+                    • 说明：${result.criteria.description}
+                `;
+            }
+
+            // 显示用户列表
+            displayInactiveUsersList(result.inactive_users);
+
+        } else {
+            throw new Error(result.detail || '获取不活跃用户失败');
+        }
+
+    } catch (error) {
+        console.error('获取不活跃用户失败:', error);
+        showMessage('获取不活跃用户失败: ' + error.message, 'danger');
+
+        document.getElementById('modalInactiveUsersList').innerHTML = `
+            <div class="text-center py-4 text-danger">
+                <i class="fas fa-exclamation-circle fa-2x"></i>
+                <p class="mt-2">加载失败</p>
+            </div>
+        `;
+    }
+}
+
+/**
+ * 显示不活跃用户列表
+ */
+function displayInactiveUsersList(users) {
+    const container = document.getElementById('modalInactiveUsersList');
+
+    if (!users || users.length === 0) {
+        container.innerHTML = `
+            <div class="text-center py-4 text-muted">
+                <i class="fas fa-smile fa-2x"></i>
+                <p class="mt-2">太好了！没有不活跃用户</p>
+            </div>
+        `;
+        return;
+    }
+
+    const usersHtml = users.map(user => {
+        const lastVideoText = user.last_video_days > 0
+            ? `${user.last_video_days}天前`
+            : '无记录';
+
+        const reasonsBadges = user.inactive_reasons.map(reason =>
+            `<span class="badge bg-warning text-dark me-1">${reason}</span>`
+        ).join('');
+
+        return `
+            <div class="user-item border rounded p-3 mb-2" data-username="${user.uname.toLowerCase()}">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <img src="${user.face || '/static/img/default-avatar.svg'}" 
+                             class="rounded-circle" 
+                             width="40" height="40" 
+                             alt="${user.uname}"
+                             onerror="this.src='/static/img/default-avatar.svg'">
+                    </div>
+                    <div class="col">
+                        <div class="fw-bold">${user.uname}</div>
+                        <div class="text-muted small">
+                            最后更新: ${lastVideoText} | 
+                            活跃度: ${user.activity_score?.toFixed(2) || '0.00'} | 
+                            视频: ${user.video_count || 0}个
+                        </div>
+                        <div class="mt-1">${reasonsBadges}</div>
+                    </div>
+                    <div class="col-auto">
+                        <button class="btn btn-outline-danger btn-sm" 
+                                onclick="unfollowUser('${user.uid}', '${user.uname}')">
+                            <i class="fas fa-user-minus"></i> 取消关注
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    container.innerHTML = usersHtml;
+}
+
+/**
+ * 过滤不活跃用户
+ */
+function filterInactiveUsers() {
+    const searchInput = document.getElementById('inactiveSearchInput');
+    const searchTerm = searchInput.value.toLowerCase();
+    const userItems = document.querySelectorAll('#modalInactiveUsersList .user-item');
+
+    userItems.forEach(item => {
+        const username = item.dataset.username;
+        if (username.includes(searchTerm)) {
+            item.style.display = 'block';
+        } else {
+            item.style.display = 'none';
+        }
+    });
+}
+
+/**
+ * 取消关注用户
+ */
+async function unfollowUser(uid, uname) {
+    if (!confirm(`确定要取消关注 "${uname}" 吗？`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/bilibili/unfollow', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ uid: uid })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage(`成功取消关注 ${uname}`, 'success');
+            // 重新加载不活跃用户列表
+            showAllInactiveUsers();
+        } else {
+            throw new Error(result.detail || '取消关注失败');
+        }
+
+    } catch (error) {
+        console.error('取消关注失败:', error);
+        showMessage('取消关注失败: ' + error.message, 'danger');
+    }
+}
+
+/**
+ * 批量取消关注不活跃用户
+ */
+async function batchUnfollowInactive() {
+    const userItems = document.querySelectorAll('#modalInactiveUsersList .user-item');
+    const visibleUsers = Array.from(userItems).filter(item => item.style.display !== 'none');
+
+    if (visibleUsers.length === 0) {
+        showMessage('没有可操作的用户', 'warning');
+        return;
+    }
+
+    if (!confirm(`确定要批量取消关注 ${visibleUsers.length} 个不活跃用户吗？此操作不可撤销！`)) {
+        return;
+    }
+
+    // TODO: 实现批量取消关注功能
+    showMessage('批量操作功能开发中...', 'info');
+}
+
 // 全局函数，供其他地方调用
 window.startSync = startSync;
 window.autoCategories = autoCategories;
-window.generateReport = generateReport; 
+window.generateReport = generateReport;
+window.showAllInactiveUsers = showAllInactiveUsers;
+window.filterInactiveUsers = filterInactiveUsers;
+window.unfollowUser = unfollowUser;
+window.batchUnfollowInactive = batchUnfollowInactive; 

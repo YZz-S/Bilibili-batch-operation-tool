@@ -726,4 +726,125 @@ async def fix_user_levels(req: Request):
         
     except Exception as e:
         logger.error(f"修复用户等级信息失败: {e}")
-        raise HTTPException(status_code=500, detail="修复用户等级信息失败") 
+        raise HTTPException(status_code=500, detail="修复用户等级信息失败")
+
+
+@router.post("/sync-user-stats")
+async def sync_user_stats(req: Request, limit: int = 10):
+    """同步用户真实统计数据（从B站API获取）"""
+    try:
+        db_manager = req.app.state.db_manager
+        api = await get_bilibili_api()
+        
+        if not api.is_configured():
+            raise HTTPException(status_code=400, detail="请先配置哔哩哔哩Cookie")
+        
+        # 获取所有关注的用户
+        following_list = await db_manager.get_following_list()
+        
+        updated_count = 0
+        error_count = 0
+        consecutive_failures = 0
+        max_consecutive_failures = 5
+        
+        # 根据limit决定处理用户数量
+        if limit == 0:
+            users_to_process = following_list  # 处理全部用户
+            logger.info(f"开始同步全部 {len(following_list)} 个用户的真实统计数据")
+        else:
+            users_to_process = following_list[:limit]
+            logger.info(f"开始同步 {len(users_to_process)} 个用户的真实统计数据")
+        
+        for i, user in enumerate(users_to_process):
+            try:
+                uid = user["uid"]
+                uname = user.get('uname', str(uid))
+                
+                # 检测连续失败次数，避免被风控
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.warning(f"检测到连续 {consecutive_failures} 次失败，可能触发风控，停止同步")
+                    break
+                
+                # 从B站API获取真实统计数据
+                real_stats = await api.get_user_stats(uid)
+                
+                if real_stats:
+                    # 更新或插入到数据库
+                    cursor = await db_manager._connection.execute(
+                        "SELECT uid FROM user_stats WHERE uid = ?", (uid,)
+                    )
+                    existing = await cursor.fetchone()
+                    
+                    if existing:
+                        # 更新现有记录
+                        await db_manager._connection.execute("""
+                            UPDATE user_stats SET 
+                                fans_count = ?, following_count = ?, video_count = ?,
+                                total_views = ?, last_video_time = ?, activity_score = ?
+                            WHERE uid = ?
+                        """, (
+                            real_stats["fans_count"], real_stats["following_count"], 
+                            real_stats["video_count"], real_stats["total_views"],
+                            real_stats["last_video_time"], real_stats["activity_score"], uid
+                        ))
+                    else:
+                        # 插入新记录
+                        await db_manager._connection.execute("""
+                            INSERT INTO user_stats 
+                            (uid, fans_count, following_count, video_count, total_views, 
+                             last_video_time, activity_score) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?)
+                        """, (
+                            uid, real_stats["fans_count"], real_stats["following_count"],
+                            real_stats["video_count"], real_stats["total_views"],
+                            real_stats["last_video_time"], real_stats["activity_score"]
+                        ))
+                    
+                    updated_count += 1
+                    consecutive_failures = 0  # 成功后重置失败计数
+                    logger.info(f"已更新用户 {uname} 的真实统计数据")
+                else:
+                    error_count += 1
+                    consecutive_failures += 1
+                    logger.warning(f"获取用户 {uname} 统计数据失败，连续失败 {consecutive_failures} 次")
+                
+                # 根据用户数量和失败情况调整延迟
+                if limit == 0:  # 全部用户模式，使用更长延迟
+                    base_delay = 2.0 if consecutive_failures == 0 else min(consecutive_failures * 1.0, 5.0)
+                elif limit >= 50:  # 大批量模式
+                    base_delay = 1.5 if consecutive_failures == 0 else min(consecutive_failures * 0.8, 4.0)
+                else:  # 小批量模式
+                    base_delay = 1.0 if consecutive_failures == 0 else min(consecutive_failures * 0.5, 3.0)
+                
+                await asyncio.sleep(base_delay)
+                
+                # 每处理10个用户报告一次进度
+                if (i + 1) % 10 == 0:
+                    logger.info(f"进度: {i + 1}/{len(users_to_process)}, 成功: {updated_count}, 失败: {error_count}")
+                    
+            except Exception as e:
+                logger.error(f"同步用户 {user.get('uname', uid)} 统计数据失败: {e}")
+                error_count += 1
+                consecutive_failures += 1
+        
+        # 提交更改
+        await db_manager._connection.commit()
+        
+        # 构建返回消息
+        wind_control_msg = ""
+        if consecutive_failures >= max_consecutive_failures:
+            wind_control_msg = "（因检测到可能的风控限制而提前停止）"
+        
+        return {
+            "message": f"用户统计数据同步完成{wind_control_msg}",
+            "updated_count": updated_count,
+            "error_count": error_count,
+            "total_processed": min(i + 1, len(users_to_process)) if 'i' in locals() else 0,
+            "total_users": len(users_to_process),
+            "wind_control_detected": consecutive_failures >= max_consecutive_failures,
+            "note": "这是真实的B站数据，包含准确的视频数量和最后更新时间"
+        }
+        
+    except Exception as e:
+        logger.error(f"同步用户统计数据失败: {e}")
+        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}") 

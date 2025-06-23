@@ -199,14 +199,63 @@
         .spinner-border.text-primary {
             border-top-color: #63b3ed;
         }
+    }
 
-        .spinner-border.text-warning {
-            border-top-color: #f6e05e;
-        }
+    /* 全屏加载动画样式 */
+    .fullscreen-loader {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        backdrop-filter: blur(5px);
+    }
 
-        .spinner-border.text-success {
-            border-top-color: #68d391;
-        }
+    .loader-content {
+        text-align: center;
+        color: white;
+        background: rgba(255, 255, 255, 0.1);
+        padding: 2rem;
+        border-radius: 15px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        max-width: 400px;
+        width: 90%;
+    }
+
+    .loader-spinner {
+        margin-bottom: 1rem;
+    }
+
+    .loader-title {
+        color: white;
+        margin-bottom: 0.5rem;
+        font-size: 1.2rem;
+    }
+
+    .loader-subtitle {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+        margin-bottom: 1rem;
+    }
+
+    .loader-info {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.8rem;
+        margin-bottom: 1rem;
+    }
+
+    .spinner-border.text-warning {
+        border-top-color: #f6e05e;
+    }
+
+    .spinner-border.text-success {
+        border-top-color: #68d391;
+    }
     }
 </style>
 {% endblock %}
@@ -340,8 +389,40 @@
         <!-- 不活跃用户 -->
         <div class="col-lg-6">
             <div class="analysis-card">
-                <h5><i class="fas fa-user-times"></i> 不活跃用户</h5>
-                <div id="inactiveUsersList" style="max-height: 350px; overflow-y: auto;">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0"><i class="fas fa-user-times"></i> 不活跃用户</h5>
+                    <button class="btn btn-outline-primary btn-sm" onclick="showAllInactiveUsers()">
+                        <i class="fas fa-list"></i> 查看全部
+                    </button>
+                </div>
+
+                <!-- 检测标准说明 -->
+                <div class="alert alert-info" style="font-size: 0.85rem;">
+                    <strong><i class="fas fa-info-circle"></i> 检测标准：</strong><br>
+                    <span id="inactiveCriteria">
+                        • 主要：超过30天未发布视频<br>
+                        • 辅助：活跃度低于0.2且视频少于3个
+                    </span>
+                </div>
+
+                <!-- 数据来源说明 -->
+                <div class="alert alert-warning" style="font-size: 0.8rem;">
+                    <strong><i class="fas fa-exclamation-triangle"></i> 数据说明：</strong><br>
+                    当前使用模拟数据，可能不准确。
+                    <div class="mt-2">
+                        <button class="btn btn-outline-primary btn-sm me-2" onclick="syncRealUserStats(10)">
+                            <i class="fas fa-sync"></i> 同步10个用户
+                        </button>
+                        <button class="btn btn-outline-success btn-sm me-2" onclick="syncRealUserStats(50)">
+                            <i class="fas fa-sync-alt"></i> 同步50个用户
+                        </button>
+                        <button class="btn btn-outline-danger btn-sm" onclick="syncRealUserStats(0)">
+                            <i class="fas fa-globe"></i> 同步全部用户
+                        </button>
+                    </div>
+                </div>
+
+                <div id="inactiveUsersList" style="max-height: 300px; overflow-y: auto;">
                     <div class="text-center py-3">
                         <div class="spinner-border text-warning" role="status">
                             <span class="visually-hidden">Loading...</span>
@@ -366,6 +447,102 @@
                         <div class="mt-2">生成建议中...</div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 全屏加载动画 -->
+<div id="fullscreenLoader" class="fullscreen-loader" style="display: none;">
+    <div class="loader-content">
+        <div class="loader-spinner">
+            <div class="spinner-border text-primary" style="width: 4rem; height: 4rem;" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+        <h4 class="loader-title mt-3">正在同步真实数据...</h4>
+        <p class="loader-subtitle" id="loaderSubtitle">正在从B站API获取准确的用户统计信息</p>
+        <div class="progress mt-3" style="width: 300px;">
+            <div id="syncProgress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                style="width: 0%"></div>
+        </div>
+        <p class="loader-info mt-2" id="loaderInfo">请耐心等待，这可能需要几分钟...</p>
+        <button class="btn btn-outline-light btn-sm mt-3" onclick="cancelSync()">
+            <i class="fas fa-times"></i> 取消同步
+        </button>
+    </div>
+</div>
+
+<!-- 不活跃用户详情弹窗 -->
+<div class="modal fade" id="inactiveUsersModal" tabindex="-1" aria-labelledby="inactiveUsersModalLabel">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="inactiveUsersModalLabel">
+                    <i class="fas fa-user-times"></i> 所有不活跃用户
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <!-- 统计信息 -->
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <h4 class="text-danger" id="modalInactiveCount">-</h4>
+                                <small class="text-muted">不活跃用户</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <h4 class="text-primary" id="modalTotalCount">-</h4>
+                                <small class="text-muted">总关注数</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card text-center">
+                            <div class="card-body">
+                                <h4 class="text-warning" id="modalInactivePercentage">-</h4>
+                                <small class="text-muted">不活跃比例</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 检测标准 -->
+                <div class="alert alert-info">
+                    <strong><i class="fas fa-info-circle"></i> 检测标准：</strong><br>
+                    <span id="modalInactiveCriteria">
+                        • 主要标准：超过30天未发布视频<br>
+                        • 辅助标准：活跃度低于0.2且视频少于3个<br>
+                        • 说明：主要以发布时间为准，辅助考虑活跃度和内容产出
+                    </span>
+                </div>
+
+                <!-- 搜索框 -->
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="inactiveSearchInput" placeholder="搜索用户名..."
+                        onkeyup="filterInactiveUsers()">
+                </div>
+
+                <!-- 用户列表 -->
+                <div id="modalInactiveUsersList" style="max-height: 400px; overflow-y: auto;">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <div class="mt-2">正在加载不活跃用户...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+                <button type="button" class="btn btn-danger" onclick="batchUnfollowInactive()">
+                    <i class="fas fa-user-minus"></i> 批量取消关注
+                </button>
             </div>
         </div>
     </div>
@@ -458,7 +635,7 @@
 
         } catch (error) {
             console.error('加载分析数据失败:', error);
-            showNotification('加载分析数据失败: ' + error.message, 'error');
+            showMessage('加载分析数据失败: ' + error.message, 'danger');
         }
     }
 
@@ -851,8 +1028,16 @@
     /**
      * 更新清理建议
      */
-    function updateCleanupSuggestions(suggestions) {
+    function updateCleanupSuggestions(data) {
         const container = document.getElementById('cleanupSuggestions');
+
+        // 处理API返回的数据格式
+        let suggestions = [];
+        if (data && data.cleanup_suggestions) {
+            suggestions = data.cleanup_suggestions;
+        } else if (Array.isArray(data)) {
+            suggestions = data;
+        }
 
         if (!suggestions || suggestions.length === 0) {
             container.innerHTML = '<div class="text-center text-muted py-3">暂无清理建议</div>';
@@ -926,6 +1111,186 @@
     }
 
     /**
+     * 显示所有不活跃用户
+     */
+    async function showAllInactiveUsers() {
+        try {
+            // 显示弹窗
+            const modal = new bootstrap.Modal(document.getElementById('inactiveUsersModal'));
+            modal.show();
+
+            // 获取当前的忽略未分组设置
+            const ignoreUngrouped = document.getElementById('ignoreUngroupedSwitch')?.checked || false;
+
+            // 加载数据
+            const response = await fetch(`/api/analysis/inactive/all?ignore_ungrouped=${ignoreUngrouped}`);
+            const result = await response.json();
+
+            if (response.ok) {
+                // 更新统计信息
+                document.getElementById('modalInactiveCount').textContent = result.total_count;
+                document.getElementById('modalTotalCount').textContent = result.total_following;
+                document.getElementById('modalInactivePercentage').textContent = result.inactive_percentage + '%';
+
+                // 更新检测标准
+                if (result.criteria) {
+                    document.getElementById('modalInactiveCriteria').innerHTML = `
+                        • 主要标准：${result.criteria.primary}<br>
+                        • 辅助标准：${result.criteria.secondary}<br>
+                        • 说明：${result.criteria.description}
+                    `;
+                }
+
+                // 显示用户列表
+                displayInactiveUsersList(result.inactive_users);
+
+            } else {
+                throw new Error(result.detail || '获取不活跃用户失败');
+            }
+
+        } catch (error) {
+            console.error('获取不活跃用户失败:', error);
+            showMessage('获取不活跃用户失败: ' + error.message, 'danger');
+
+            document.getElementById('modalInactiveUsersList').innerHTML = `
+                <div class="text-center py-4 text-danger">
+                    <i class="fas fa-exclamation-circle fa-2x"></i>
+                    <p class="mt-2">加载失败</p>
+                </div>
+            `;
+        }
+    }
+
+    /**
+     * 显示不活跃用户列表
+     */
+    function displayInactiveUsersList(users) {
+        const container = document.getElementById('modalInactiveUsersList');
+
+        if (!users || users.length === 0) {
+            container.innerHTML = `
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-smile fa-2x"></i>
+                    <p class="mt-2">太好了！没有不活跃用户</p>
+                </div>
+            `;
+            return;
+        }
+
+        const usersHtml = users.map(user => {
+            const lastVideoText = user.last_video_days > 0
+                ? `${user.last_video_days}天前`
+                : '无记录';
+
+            const reasonsBadges = user.inactive_reasons.map(reason =>
+                `<span class="badge bg-warning text-dark me-1">${reason}</span>`
+            ).join('');
+
+            return `
+                <div class="user-item border rounded p-3 mb-2" data-username="${user.uname.toLowerCase()}">
+                    <div class="row align-items-center">
+                        <div class="col-auto">
+                            <img src="${user.face || '/static/img/default-avatar.svg'}" 
+                                 class="rounded-circle" 
+                                 width="40" height="40" 
+                                 alt="${user.uname}"
+                                 onerror="this.src='/static/img/default-avatar.svg'">
+                        </div>
+                        <div class="col">
+                            <div class="fw-bold">${user.uname}</div>
+                            <div class="text-muted small">
+                                最后更新: ${lastVideoText} | 
+                                活跃度: ${user.activity_score?.toFixed(2) || '0.00'} | 
+                                视频: ${user.video_count || 0}个
+                            </div>
+                            <div class="mt-1">${reasonsBadges}</div>
+                        </div>
+                        <div class="col-auto">
+                            <button class="btn btn-outline-danger btn-sm" 
+                                    onclick="unfollowSingleUser('${user.uid}', '${user.uname}')">
+                                <i class="fas fa-user-minus"></i> 取消关注
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        container.innerHTML = usersHtml;
+    }
+
+    /**
+     * 过滤不活跃用户
+     */
+    function filterInactiveUsers() {
+        const searchInput = document.getElementById('inactiveSearchInput');
+        const searchTerm = searchInput.value.toLowerCase();
+        const userItems = document.querySelectorAll('#modalInactiveUsersList .user-item');
+
+        userItems.forEach(item => {
+            const username = item.dataset.username;
+            if (username.includes(searchTerm)) {
+                item.style.display = 'block';
+            } else {
+                item.style.display = 'none';
+            }
+        });
+    }
+
+    /**
+     * 取消关注单个用户（从弹窗中）
+     */
+    async function unfollowSingleUser(uid, uname) {
+        if (!confirm(`确定要取消关注 "${uname}" 吗？`)) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/bilibili/unfollow', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ uid: uid })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showMessage(`成功取消关注 ${uname}`, 'success');
+                // 重新加载不活跃用户列表
+                showAllInactiveUsers();
+            } else {
+                throw new Error(result.detail || '取消关注失败');
+            }
+
+        } catch (error) {
+            console.error('取消关注失败:', error);
+            showMessage('取消关注失败: ' + error.message, 'danger');
+        }
+    }
+
+    /**
+     * 批量取消关注不活跃用户
+     */
+    async function batchUnfollowInactive() {
+        const userItems = document.querySelectorAll('#modalInactiveUsersList .user-item');
+        const visibleUsers = Array.from(userItems).filter(item => item.style.display !== 'none');
+
+        if (visibleUsers.length === 0) {
+            showMessage('没有可操作的用户', 'warning');
+            return;
+        }
+
+        if (!confirm(`确定要批量取消关注 ${visibleUsers.length} 个不活跃用户吗？此操作不可撤销！`)) {
+            return;
+        }
+
+        // TODO: 实现批量取消关注功能
+        showMessage('批量操作功能开发中...', 'info');
+    }
+
+    /**
      * 取消关注用户
      */
     async function unfollowUser(uid) {
@@ -945,14 +1310,14 @@
             const result = await response.json();
 
             if (response.ok) {
-                showNotification('取消关注成功', 'success');
+                showMessage('取消关注成功', 'success');
                 loadAnalysisData(); // 重新加载数据
             } else {
                 throw new Error(result.message || '取消关注失败');
             }
         } catch (error) {
             console.error('取消关注失败:', error);
-            showNotification('取消关注失败: ' + error.message, 'error');
+            showMessage('取消关注失败: ' + error.message, 'danger');
         }
     }
 
@@ -960,7 +1325,7 @@
      * 应用建议
      */
     function applySuggestion(index) {
-        showNotification('建议功能开发中...', 'info');
+        showMessage('建议功能开发中...', 'info');
     }
 
     /**
@@ -1009,12 +1374,205 @@
 
                 alert(debugText);
             } else {
-                showNotification('获取调试信息失败', 'error');
+                showMessage('获取调试信息失败', 'danger');
             }
         } catch (error) {
             console.error('获取调试信息失败:', error);
-            showNotification('获取调试信息失败: ' + error.message, 'error');
+            showMessage('获取调试信息失败: ' + error.message, 'danger');
         }
+    }
+
+    // 全局变量存储同步控制器
+    let syncController = null;
+
+    /**
+     * 请求浏览器通知权限
+     */
+    async function requestNotificationPermission() {
+        if ("Notification" in window) {
+            if (Notification.permission === "default") {
+                await Notification.requestPermission();
+            }
+        }
+    }
+
+    /**
+     * 发送浏览器通知
+     */
+    function sendNotification(title, body, options = {}) {
+        if ("Notification" in window && Notification.permission === "granted") {
+            new Notification(title, {
+                body: body,
+                icon: '/static/img/default-avatar.png',
+                ...options
+            });
+        }
+    }
+
+    /**
+     * 同步真实用户统计数据
+     */
+    async function syncRealUserStats(limit = 10) {
+        // 请求通知权限
+        await requestNotificationPermission();
+
+        const limitText = limit === 0 ? '全部' : limit;
+        if (!confirm(`确定要同步 ${limitText} 个用户的真实数据吗？这将从B站API获取准确的视频数量和最后更新时间，但可能需要较长时间。`)) {
+            return;
+        }
+
+        // 显示全屏加载动画
+        showFullscreenLoader(limit);
+
+        try {
+            console.log(`开始同步 ${limitText} 个用户的真实数据...`);
+
+            // 创建同步控制器
+            syncController = new AbortController();
+            const timeoutId = setTimeout(() => {
+                if (syncController) {
+                    syncController.abort();
+                }
+            }, 300000); // 5分钟超时
+
+            // 开始同步
+            const url = limit === 0 ? '/api/bilibili/sync-user-stats' : `/api/bilibili/sync-user-stats?limit=${limit}`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                signal: syncController.signal
+            });
+
+            clearTimeout(timeoutId);
+            console.log('API响应状态:', response.status);
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('API错误响应:', errorText);
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const result = await response.json();
+            console.log('同步结果:', result);
+
+            // 隐藏加载动画
+            hideFullscreenLoader();
+
+            // 显示结果
+            let message, type;
+            if (result.updated_count > 0) {
+                message = `✅ 数据同步成功！更新了 ${result.updated_count} 个用户的真实数据`;
+                type = 'success';
+
+                // 发送浏览器通知
+                sendNotification('数据同步完成', `成功更新了 ${result.updated_count} 个用户的真实数据`);
+
+                // 隐藏数据说明警告
+                const warningAlert = document.querySelector('.alert-warning');
+                if (warningAlert) {
+                    warningAlert.style.display = 'none';
+                }
+
+                // 刷新分析数据
+                setTimeout(() => loadAnalysisData(), 1000);
+            } else {
+                message = `⚠️ 同步完成，但没有成功更新数据。失败数量：${result.error_count}`;
+                type = 'warning';
+
+                // 发送浏览器通知
+                sendNotification('数据同步完成', `同步完成，但没有成功更新数据`);
+            }
+
+            showMessage(message, type);
+
+        } catch (error) {
+            hideFullscreenLoader();
+
+            if (error.name === 'AbortError') {
+                console.error('同步被取消或超时');
+                showMessage('⏰ 同步已取消或超时', 'warning');
+                sendNotification('数据同步取消', '同步操作已被取消或超时');
+            } else {
+                console.error('数据同步失败:', error);
+                showMessage('❌ 数据同步失败: ' + error.message, 'danger');
+                sendNotification('数据同步失败', error.message);
+            }
+        } finally {
+            syncController = null;
+        }
+    }
+
+    /**
+     * 显示全屏加载动画
+     */
+    function showFullscreenLoader(limit) {
+        const loader = document.getElementById('fullscreenLoader');
+        const subtitle = document.getElementById('loaderSubtitle');
+        const info = document.getElementById('loaderInfo');
+
+        const limitText = limit === 0 ? '全部' : limit;
+        subtitle.textContent = `正在同步 ${limitText} 个用户的数据，从B站API获取准确信息...`;
+
+        if (limit === 0) {
+            info.textContent = '同步全部用户可能需要很长时间，请耐心等待...';
+        } else if (limit >= 50) {
+            info.textContent = '同步较多用户可能需要几分钟，请耐心等待...';
+        } else {
+            info.textContent = '正在处理中，请稍候...';
+        }
+
+        loader.style.display = 'flex';
+
+        // 启动进度条动画
+        startProgressAnimation();
+    }
+
+    /**
+     * 隐藏全屏加载动画
+     */
+    function hideFullscreenLoader() {
+        const loader = document.getElementById('fullscreenLoader');
+        loader.style.display = 'none';
+
+        // 重置进度条
+        const progress = document.getElementById('syncProgress');
+        progress.style.width = '0%';
+    }
+
+    /**
+     * 启动进度条动画
+     */
+    function startProgressAnimation() {
+        const progress = document.getElementById('syncProgress');
+        let width = 0;
+
+        const interval = setInterval(() => {
+            if (syncController === null) {
+                clearInterval(interval);
+                return;
+            }
+
+            width += Math.random() * 2;
+            if (width >= 95) {
+                width = 95; // 不要到100%，等实际完成再设为100%
+            }
+
+            progress.style.width = width + '%';
+        }, 500);
+    }
+
+    /**
+     * 取消同步
+     */
+    function cancelSync() {
+        if (syncController) {
+            syncController.abort();
+            syncController = null;
+        }
+        hideFullscreenLoader();
+        showMessage('同步已取消', 'info');
     }
 
     /**

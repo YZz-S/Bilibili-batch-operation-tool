@@ -251,7 +251,12 @@ class FollowingAnalyzer:
     
     def find_inactive_users(self, following_list: List[Dict[str, Any]], 
                            user_stats: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """找出不活跃的用户"""
+        """找出不活跃的用户
+        
+        不活跃判断标准：
+        1. 主要标准：超过30天未发布视频
+        2. 辅助标准：活跃度分数低于0.2 且 视频数量少于3个
+        """
         inactive_users = []
         current_time = datetime.now()
         
@@ -266,35 +271,49 @@ class FollowingAnalyzer:
             is_inactive = False
             inactive_reasons = []
             
-            # 最后发视频时间超过3个月
+            # 主要标准：最后发视频时间超过30天
             last_video_time = stat.get("last_video_time", 0)
+            days_since_last_video = -1
+            
             if last_video_time > 0:
                 last_video_date = datetime.fromtimestamp(last_video_time)
                 days_since_last_video = (current_time - last_video_date).days
-                if days_since_last_video > 90:
+                
+                # 主要判断：30天未更新视频
+                if days_since_last_video > 30:
                     is_inactive = True
                     inactive_reasons.append(f"{days_since_last_video}天未发视频")
             else:
-                # 没有视频时间记录，考虑为不活跃
-                is_inactive = True
-                inactive_reasons.append("无视频活动记录")
+                # 没有视频时间记录，但不直接标记为不活跃
+                # 需要结合其他指标综合判断
+                days_since_last_video = 999  # 标记为无记录
             
-            # 活跃度分数低于0.3
+            # 辅助判断：综合活跃度和内容产出
             activity_score = stat.get("activity_score", 0)
-            if activity_score < 0.3:
-                is_inactive = True
-                inactive_reasons.append(f"活跃度过低({activity_score:.2f})")
-            
-            # 视频数量过少
             video_count = stat.get("video_count", 0)
-            if video_count < 5:
+            
+            # 只有在活跃度很低且视频很少的情况下才额外标记为不活跃
+            if activity_score < 0.2 and video_count < 3:
+                if not is_inactive:  # 如果时间标准没有判定为不活跃
+                    is_inactive = True
+                    inactive_reasons.append(f"活跃度极低({activity_score:.2f})且内容稀少({video_count}个视频)")
+                else:
+                    # 如果已经因为时间被判定为不活跃，添加额外原因
+                    inactive_reasons.append(f"活跃度低({activity_score:.2f})")
+                    inactive_reasons.append(f"视频数量少({video_count})")
+            
+            # 对于没有视频记录的特殊处理
+            if last_video_time == 0 and activity_score < 0.1:
                 is_inactive = True
-                inactive_reasons.append(f"视频数量过少({video_count})")
+                if "无视频活动记录" not in " ".join(inactive_reasons):
+                    inactive_reasons.append("无视频活动记录且活跃度极低")
             
             if is_inactive:
                 user_copy = user.copy()
                 user_copy["inactive_reasons"] = inactive_reasons
-                user_copy["last_video_days"] = (current_time - datetime.fromtimestamp(last_video_time)).days if last_video_time > 0 else -1
+                user_copy["last_video_days"] = days_since_last_video
+                user_copy["activity_score"] = activity_score
+                user_copy["video_count"] = video_count
                 inactive_users.append(user_copy)
         
         # 按不活跃程度排序 - 综合考虑多个因素
