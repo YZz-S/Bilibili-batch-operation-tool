@@ -204,7 +204,7 @@ class DatabaseManager:
                     user_data.get('mtime', 0),
                     user_data.get('mtime', 0),
                     json.dumps(user_data.get('tag', []), ensure_ascii=False),
-                    user_data.get('attribute', 0),
+                    user_data.get('group_id', 0),  # 使用处理后的group_id
                     user_data.get('special', 0),
                     datetime.now().isoformat(),
                     uid
@@ -336,6 +336,182 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"获取分类统计失败: {e}")
             return []
+    
+    async def get_follow_groups(self) -> List[Dict[str, Any]]:
+        """获取关注分组列表，包含实际用户数量"""
+        try:
+            sql = '''
+                SELECT g.group_id, g.group_name, g.group_count, g.created_at, g.updated_at,
+                       COALESCE(actual_counts.actual_count, 0) as actual_count
+                FROM follow_groups g
+                LEFT JOIN (
+                    SELECT group_id, COUNT(*) as actual_count
+                    FROM following_list 
+                    WHERE group_id IS NOT NULL AND group_id > 0
+                    GROUP BY group_id
+                ) actual_counts ON g.group_id = actual_counts.group_id
+                ORDER BY g.group_id
+            '''
+            
+            cursor = await self._connection.execute(sql)
+            rows = await cursor.fetchall()
+            
+            columns = [description[0] for description in cursor.description]
+            groups = [dict(zip(columns, row)) for row in rows]
+            
+            # 添加未分组用户统计（作为特殊分组）
+            ungrouped_count = await self.get_following_count_by_group(0)
+            if ungrouped_count > 0:
+                groups.insert(0, {
+                    'group_id': 0,
+                    'group_name': '未分组',
+                    'group_count': ungrouped_count,
+                    'actual_count': ungrouped_count,
+                    'created_at': None,
+                    'updated_at': None
+                })
+            
+            self.logger.debug(f"获取到 {len(groups)} 个分组，未分组用户 {ungrouped_count} 个")
+            return groups
+        except Exception as e:
+            self.logger.error(f"获取关注分组失败: {e}")
+            return []
+    
+    async def insert_or_update_follow_group(self, group_id: int, group_name: str, group_count: int = 0) -> bool:
+        """插入或更新关注分组"""
+        try:
+            # 检查是否已存在
+            cursor = await self._connection.execute(
+                "SELECT group_id FROM follow_groups WHERE group_id = ?", (group_id,)
+            )
+            existing = await cursor.fetchone()
+            
+            if existing:
+                # 更新现有分组
+                sql = '''
+                    UPDATE follow_groups 
+                    SET group_name = ?, group_count = ?, updated_at = ?
+                    WHERE group_id = ?
+                '''
+                await self._connection.execute(sql, (
+                    group_name, group_count, datetime.now().isoformat(), group_id
+                ))
+            else:
+                # 插入新分组
+                sql = '''
+                    INSERT INTO follow_groups (group_id, group_name, group_count, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?)
+                '''
+                now = datetime.now().isoformat()
+                await self._connection.execute(sql, (
+                    group_id, group_name, group_count, now, now
+                ))
+            
+            await self._connection.commit()
+            return True
+        except Exception as e:
+            self.logger.error(f"插入或更新分组失败: {e}")
+            return False
+    
+    async def update_user_group(self, uid: int, group_id: int) -> bool:
+        """更新用户分组"""
+        try:
+            sql = '''
+                UPDATE following_list 
+                SET group_id = ?, updated_at = ?
+                WHERE uid = ?
+            '''
+            await self._connection.execute(sql, (
+                group_id, datetime.now().isoformat(), uid
+            ))
+            await self._connection.commit()
+            return True
+        except Exception as e:
+            self.logger.error(f"更新用户分组失败: {e}")
+            return False
+    
+    async def get_following_by_group(self, group_id: int = None, limit: int = None, offset: int = 0,
+                                    search: str = None, sort_by: str = "follow_time", 
+                                    sort_order: str = "desc") -> List[Dict[str, Any]]:
+        """按分组获取关注列表"""
+        try:
+            sql = "SELECT * FROM following_list WHERE 1=1"
+            params = []
+            
+            if group_id is not None:
+                if group_id == 0:
+                    # 未分组用户：group_id为0或NULL
+                    sql += " AND (group_id = 0 OR group_id IS NULL)"
+                else:
+                    sql += " AND group_id = ?"
+                    params.append(group_id)
+            
+            if search:
+                sql += " AND (uname LIKE ? OR sign LIKE ?)"
+                params.extend([f"%{search}%", f"%{search}%"])
+            
+            # 排序逻辑
+            valid_sort_fields = {
+                "follow_time": "follow_time",
+                "uname": "uname",
+                "level": "level", 
+                "vip_type": "vip_type",
+                "category": "category",
+                "created_at": "created_at"
+            }
+            
+            if sort_by in valid_sort_fields:
+                sort_field = valid_sort_fields[sort_by]
+                order = "DESC" if sort_order.lower() == "desc" else "ASC"
+                sql += f" ORDER BY {sort_field} {order}"
+            else:
+                sql += " ORDER BY follow_time DESC"
+            
+            if limit:
+                sql += " LIMIT ? OFFSET ?"
+                params.extend([limit, offset])
+            
+            cursor = await self._connection.execute(sql, params)
+            rows = await cursor.fetchall()
+            
+            # 转换为字典列表
+            columns = [description[0] for description in cursor.description]
+            result = []
+            for row in rows:
+                user_dict = dict(zip(columns, row))
+                # 解析tags字段
+                if user_dict.get('tags'):
+                    try:
+                        user_dict['tags'] = json.loads(user_dict['tags'])
+                    except:
+                        user_dict['tags'] = []
+                result.append(user_dict)
+            
+            return result
+        except Exception as e:
+            self.logger.error(f"按分组获取关注列表失败: {e}")
+            return []
+    
+    async def get_following_count_by_group(self, group_id: int = None) -> int:
+        """获取指定分组的关注数量"""
+        try:
+            sql = "SELECT COUNT(*) FROM following_list WHERE 1=1"
+            params = []
+            
+            if group_id is not None:
+                if group_id == 0:
+                    # 未分组用户：group_id为0或NULL
+                    sql += " AND (group_id = 0 OR group_id IS NULL)"
+                else:
+                    sql += " AND group_id = ?"
+                    params.append(group_id)
+            
+            cursor = await self._connection.execute(sql, params)
+            row = await cursor.fetchone()
+            return row[0] if row else 0
+        except Exception as e:
+            self.logger.error(f"获取分组关注数量失败: {e}")
+            return 0
     
     async def update_user_category(self, uid: int, category: str) -> bool:
         """更新用户分类"""

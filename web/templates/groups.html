@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+
+{% block title %}关注分组管理{% endblock %}
+
+{% block extra_css %}
+<style>
+    .group-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .group-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        border-color: #007bff;
+        transform: translateY(-2px);
+    }
+
+    .group-card.active {
+        border-color: #007bff;
+        background-color: #f8f9fa;
+    }
+
+    .group-header {
+        display: flex;
+        justify-content: between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .group-title {
+        font-size: 1.2rem;
+        font-weight: bold;
+        color: #333;
+        margin: 0;
+    }
+
+    .group-count {
+        background: linear-gradient(45deg, #007bff, #0056b3);
+        color: white;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .group-stats {
+        display: flex;
+        gap: 20px;
+        font-size: 0.9rem;
+        color: #666;
+    }
+
+    .user-card {
+        border: 1px solid #e0e0e0;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+        transition: all 0.3s ease;
+    }
+
+    .user-card:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        border-color: #007bff;
+    }
+
+    .user-card.selected {
+        border-color: #28a745;
+        background-color: #f8fff8;
+    }
+
+    .user-avatar {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 2px solid #fff;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .user-info {
+        flex-grow: 1;
+        margin-left: 15px;
+    }
+
+    .user-name {
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 5px;
+    }
+
+    .user-sign {
+        color: #666;
+        font-size: 0.9em;
+        margin-bottom: 8px;
+        max-height: 40px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .user-stats {
+        display: flex;
+        gap: 15px;
+        font-size: 0.85em;
+        color: #888;
+    }
+
+    .vip-badge {
+        background: linear-gradient(45deg, #ff6b9d, #ff9999);
+        color: white;
+        font-size: 0.7em;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 5px;
+    }
+
+    .official-badge {
+        background: #1890ff;
+        color: white;
+        font-size: 0.7em;
+        padding: 2px 6px;
+        border-radius: 10px;
+        margin-left: 5px;
+    }
+
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        display: none;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+    }
+
+    .group-sidebar {
+        max-height: 70vh;
+        overflow-y: auto;
+        border-right: 1px solid #e0e0e0;
+        padding-right: 20px;
+    }
+
+    .group-content {
+        min-height: 70vh;
+        padding-left: 20px;
+    }
+
+    .batch-actions {
+        position: sticky;
+        top: 20px;
+        background: white;
+        padding: 15px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        display: none;
+    }
+
+    .empty-group {
+        text-align: center;
+        padding: 60px 20px;
+        color: #666;
+    }
+
+    .empty-group i {
+        font-size: 3rem;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+
+    .group-actions {
+        display: flex;
+        gap: 10px;
+        margin-top: 10px;
+    }
+
+    .stats-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .stats-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 消息提示容器 -->
+    <div id="message-container" class="mb-3"></div>
+
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2><i class="bi bi-collection"></i> 关注分组管理</h2>
+            <p class="text-muted">管理您的哔哩哔哩关注分组，支持批量操作和分组同步</p>
+        </div>
+        <div>
+            <button class="btn btn-primary" onclick="syncGroups()">
+                <i class="bi bi-arrow-clockwise"></i> 同步分组
+            </button>
+            <button class="btn btn-success" onclick="refreshAllData()">
+                <i class="bi bi-arrow-repeat"></i> 刷新数据
+            </button>
+        </div>
+    </div>
+
+    <!-- 统计信息 -->
+    <div class="row mb-4" id="statisticsCards">
+        <div class="col-md-3">
+            <div class="card text-center stats-card" onclick="showAllGroups()">
+                <div class="card-body">
+                    <h5 class="card-title text-primary" id="totalGroupsCount">
+                        <i class="bi bi-collection me-2"></i>0
+                    </h5>
+                    <p class="card-text">总分组数</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center stats-card" onclick="showGroupWithUsers()">
+                <div class="card-body">
+                    <h5 class="card-title text-success" id="groupsWithUsersCount">
+                        <i class="bi bi-people me-2"></i>0
+                    </h5>
+                    <p class="card-text">有用户分组</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center stats-card" onclick="showUngroupedUsers()">
+                <div class="card-body">
+                    <h5 class="card-title text-warning" id="ungroupedUsersCount">
+                        <i class="bi bi-person-x me-2"></i>0
+                    </h5>
+                    <p class="card-text">未分组用户</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-center stats-card" onclick="showActiveGroup()">
+                <div class="card-body">
+                    <h5 class="card-title text-info" id="activeGroupUsersCount">
+                        <i class="bi bi-person-check me-2"></i>0
+                    </h5>
+                    <p class="card-text">当前分组用户</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主要内容区域 -->
+    <div class="row">
+        <!-- 分组侧边栏 -->
+        <div class="col-md-4">
+            <div class="group-sidebar">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5>分组列表</h5>
+                    <button class="btn btn-sm btn-outline-primary" onclick="createNewGroup()">
+                        <i class="bi bi-plus-lg"></i> 新建分组
+                    </button>
+                </div>
+
+                <!-- 搜索分组 -->
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="groupSearchInput" placeholder="搜索分组..."
+                        onkeyup="searchGroups()">
+                </div>
+
+                <!-- 默认分组：未分组用户 -->
+                <div class="group-card" id="group-0" onclick="selectGroup(0)">
+                    <div class="group-header">
+                        <h6 class="group-title">
+                            <i class="bi bi-person-x me-2"></i>未分组用户
+                        </h6>
+                        <span class="group-count" id="ungrouped-count">0</span>
+                    </div>
+                    <div class="group-stats">
+                        <span><i class="bi bi-calendar3"></i> 默认分组</span>
+                    </div>
+                </div>
+
+                <!-- 分组列表 -->
+                <div id="groupsList">
+                    <!-- 分组卡片将在这里动态加载 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 分组内容区域 -->
+        <div class="col-md-8">
+            <div class="group-content">
+                <!-- 批量操作面板 -->
+                <div class="batch-actions" id="batchActions">
+                    <div class="row align-items-center">
+                        <div class="col-md-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="selectAllUsers"
+                                    onchange="toggleSelectAllUsers()">
+                                <label class="form-check-label" for="selectAllUsers">
+                                    全选 (<span id="selectedUsersCount">0</span>)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select form-select-sm" id="batchGroupTarget">
+                                <option value="">选择目标分组</option>
+                                <!-- 分组选项将在这里动态加载 -->
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-primary btn-sm" onclick="batchMoveToGroup()">
+                                    <i class="bi bi-arrow-right"></i> 移动到分组
+                                </button>
+                                <button class="btn btn-danger btn-sm" onclick="batchUnfollowUsers()">
+                                    <i class="bi bi-person-dash"></i> 批量取关
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 分组内容头部 -->
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div>
+                        <h5 id="groupContentTitle">选择一个分组查看用户</h5>
+                        <p class="text-muted" id="groupContentDescription">从左侧分组列表中选择一个分组</p>
+                    </div>
+                    <div id="groupContentActions" style="display: none;">
+                        <div class="input-group">
+                            <input type="text" class="form-control" id="userSearchInput" placeholder="搜索用户..."
+                                onkeyup="searchUsers()">
+                            <button class="btn btn-outline-primary" onclick="loadGroupUsers(true)">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 用户列表 -->
+                <div id="groupUsersList">
+                    <div class="empty-group">
+                        <i class="bi bi-collection"></i>
+                        <h5>选择一个分组开始管理</h5>
+                        <p>从左侧选择分组查看其中的关注用户</p>
+                    </div>
+                </div>
+
+                <!-- 分页 -->
+                <nav aria-label="Page navigation" class="mt-4">
+                    <ul class="pagination justify-content-center" id="usersPagination">
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 加载遮罩 -->
+<div class="loading-overlay" id="loadingOverlay">
+    <div class="text-center">
+        <div class="spinner-border text-primary mb-3" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <div>正在处理中...</div>
+    </div>
+</div>
+
+<!-- 创建分组模态框 -->
+<div class="modal fade" id="createGroupModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">创建新分组</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label for="newGroupName" class="form-label">分组名称</label>
+                    <input type="text" class="form-control" id="newGroupName" placeholder="请输入分组名称">
+                </div>
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    注意：B站可能不支持通过API创建新分组，此功能仅供本地管理使用。
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="submitCreateGroup()">创建</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/js/groups.js"></script>
+<script>
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function () {
+        loadGroups();
+        updateStatistics();
+
+        // 设置自动刷新（每2分钟检查一次）
+        setInterval(function () {
+            if (window.autoRefreshEnabled) {
+                updateStatistics();
+            }
+        }, 120000);
+    });
+
+    // 启用自动刷新
+    window.autoRefreshEnabled = true;
+</script>
+{% endblock %}

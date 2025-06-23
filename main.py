@@ -109,6 +109,12 @@ async def following_page(request: Request):
     return templates.TemplateResponse("following.html", {"request": request})
 
 
+@app.get("/groups", response_class=HTMLResponse)
+async def groups_page(request: Request):
+    """关注分组管理页面"""
+    return templates.TemplateResponse("groups.html", {"request": request})
+
+
 @app.get("/analysis", response_class=HTMLResponse)
 async def analysis_page(request: Request):
     """数据分析页面"""

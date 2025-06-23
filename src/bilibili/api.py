@@ -171,6 +171,65 @@ class BilibiliAPI:
             self.logger.warning(f"取消关注用户失败: {uid}")
             return False
     
+    async def get_follow_groups(self) -> Optional[List[Dict[str, Any]]]:
+        """获取关注分组列表"""
+        result = await self._request("GET", self.endpoints["follow_groups"])
+        await asyncio.sleep(self.api_delay)
+        
+        if result is not None:
+            groups = result if isinstance(result, list) else []
+            self.logger.info(f"获取到 {len(groups)} 个关注分组")
+            return groups
+        else:
+            self.logger.warning("获取关注分组失败")
+            return None
+    
+    async def modify_user_group(self, uid: int, group_id: int) -> bool:
+        """修改用户分组"""
+        data = {
+            "fids": str(uid),
+            "tagids": str(group_id),
+            "csrf": self._extract_csrf_token()
+        }
+        
+        result = await self._request("POST", self.endpoints["batch_modify"], data=data)
+        await asyncio.sleep(self.api_delay)
+        
+        if result is not None:
+            self.logger.info(f"成功修改用户 {uid} 的分组为 {group_id}")
+            return True
+        else:
+            self.logger.warning(f"修改用户 {uid} 分组失败")
+            return False
+    
+    async def create_follow_group(self, group_name: str) -> Optional[int]:
+        """创建关注分组（注意：此API可能需要特殊权限）"""
+        # 注意：B站可能不允许通过API创建新分组，这里仅作预留
+        self.logger.warning("创建关注分组功能可能需要特殊权限")
+        return None
+    
+    async def batch_unfollow_users(self, uids: List[int]) -> Tuple[int, int]:
+        """批量取消关注用户
+        
+        Returns:
+            Tuple[int, int]: (成功数量, 失败数量)
+        """
+        success_count = 0
+        error_count = 0
+        
+        for uid in uids:
+            try:
+                if await self.unfollow_user(uid):
+                    success_count += 1
+                else:
+                    error_count += 1
+            except Exception as e:
+                self.logger.error(f"批量取消关注用户 {uid} 时出错: {e}")
+                error_count += 1
+        
+        self.logger.info(f"批量取消关注完成: 成功 {success_count}, 失败 {error_count}")
+        return success_count, error_count
+    
     def _extract_csrf_token(self) -> str:
         """从Cookie中提取CSRF令牌"""
         if not self.cookie:

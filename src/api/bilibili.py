@@ -36,6 +36,18 @@ class CategoryUpdateRequest(BaseModel):
     category: str
 
 
+class GroupUpdateRequest(BaseModel):
+    """分组更新请求模型"""
+    uid: int
+    group_id: int
+
+
+class BatchGroupUpdateRequest(BaseModel):
+    """批量分组更新请求模型"""
+    uids: List[int]
+    group_id: int
+
+
 @router.get("/status")
 async def get_api_status():
     """获取API状态"""
@@ -69,6 +81,21 @@ async def _sync_following_task(db_manager):
         # 创建同步记录
         record_id = await db_manager.insert_sync_record("following_sync")
         
+        # 首先同步分组信息
+        logger.info("开始同步分组信息...")
+        bilibili_groups = await api.get_follow_groups()
+        if bilibili_groups:
+            for group in bilibili_groups:
+                group_id = group.get('tagid', 0)
+                group_name = group.get('name', '未知分组')
+                group_count = group.get('count', 0)
+                
+                if group_id > 0:  # 跳过默认分组
+                    await db_manager.insert_or_update_follow_group(
+                        group_id, group_name, group_count
+                    )
+            logger.info(f"分组信息同步完成，共 {len(bilibili_groups)} 个分组")
+        
         # 获取所有关注用户
         def progress_callback(current, total):
             logger.info(f"同步进度: {current}/{total}")
@@ -100,6 +127,17 @@ async def _sync_following_task(db_manager):
                 # 自动分类
                 category = analyzer.classify_user(user)
                 user["category"] = category
+                
+                # 从B站API中获取分组信息 (tag数组包含分组ID)
+                tag_list = user.get('tag', [])
+                if isinstance(tag_list, list) and tag_list:
+                    # 取第一个分组ID作为主分组
+                    group_id = tag_list[0]
+                    user['group_id'] = group_id
+                    logger.debug(f"用户 {uname} 属于分组 {group_id}")
+                else:
+                    # 默认分组
+                    user['group_id'] = 0
                 
                 if await db_manager.insert_following_user(user):
                     success_count += 1
@@ -234,7 +272,7 @@ async def batch_unfollow(request: UnfollowRequest, req: Request):
         api = await get_bilibili_api()
         
         # 从B站取消关注
-        success_count, error_count = await api.batch_unfollow(request.uids)
+        success_count, error_count = await api.batch_unfollow_users(request.uids)
         
         # 从数据库删除
         db_success, db_error = await db_manager.batch_unfollow(request.uids)
@@ -292,4 +330,203 @@ async def auto_categorize_users(req: Request):
         }
     except Exception as e:
         logger.error(f"自动分类失败: {e}")
-        raise HTTPException(status_code=500, detail="自动分类失败") 
+        raise HTTPException(status_code=500, detail="自动分类失败")
+
+
+@router.get("/groups")
+async def get_follow_groups(req: Request):
+    """获取关注分组列表"""
+    try:
+        db_manager = req.app.state.db_manager
+        api = await get_bilibili_api()
+        
+        logger.info("开始获取关注分组列表")
+        
+        # 首先尝试从B站获取最新分组数据
+        bilibili_groups = await api.get_follow_groups()
+        
+        if bilibili_groups:
+            logger.info(f"从B站获取到 {len(bilibili_groups)} 个分组")
+            # 更新本地数据库中的分组信息
+            for group in bilibili_groups:
+                group_id = group.get('tagid', 0)
+                group_name = group.get('name', '未知分组')
+                group_count = group.get('count', 0)
+                
+                logger.debug(f"处理分组: ID={group_id}, 名称={group_name}, 用户数={group_count}")
+                
+                if group_id > 0:  # 默认分组ID通常为0，跳过
+                    await db_manager.insert_or_update_follow_group(
+                        group_id, group_name, group_count
+                    )
+        else:
+            logger.warning("未能从B站获取分组数据，可能是API权限问题")
+        
+        # 从数据库获取分组列表（包含实际用户数量）
+        groups = await db_manager.get_follow_groups()
+        
+        # 检查数据库中的用户总数
+        total_users = await db_manager.get_following_count()
+        logger.info(f"数据库中共有 {total_users} 个关注用户，{len(groups)} 个分组")
+        
+        return {"groups": groups}
+    except Exception as e:
+        logger.error(f"获取关注分组失败: {e}")
+        raise HTTPException(status_code=500, detail="获取关注分组失败")
+
+
+@router.get("/groups/{group_id}/following")
+async def get_group_following(
+    group_id: int,
+    req: Request,
+    page: int = 1,
+    page_size: int = 20,
+    search: Optional[str] = None,
+    sort_by: Optional[str] = "follow_time",
+    sort_order: Optional[str] = "desc"
+):
+    """获取指定分组的关注列表"""
+    try:
+        logger.info(f"获取分组 {group_id} 的关注列表 - 页码: {page}, 每页: {page_size}, 搜索: {search}")
+        
+        db_manager = req.app.state.db_manager
+        offset = (page - 1) * page_size
+        
+        following_list = await db_manager.get_following_by_group(
+            group_id=group_id, limit=page_size, offset=offset, 
+            search=search, sort_by=sort_by, sort_order=sort_order
+        )
+        
+        total_count = await db_manager.get_following_count_by_group(group_id)
+        
+        logger.info(f"分组 {group_id} 查询结果: 找到 {len(following_list)} 个用户, 总计 {total_count} 个")
+        
+        return {
+            "data": following_list,
+            "pagination": {
+                "page": page,
+                "page_size": page_size,
+                "total": total_count,
+                "pages": (total_count + page_size - 1) // page_size
+            }
+        }
+    except Exception as e:
+        logger.error(f"获取分组关注列表失败: {e}")
+        raise HTTPException(status_code=500, detail="获取分组关注列表失败")
+
+
+@router.post("/update-group")
+async def update_user_group(request: GroupUpdateRequest, req: Request):
+    """更新用户分组"""
+    try:
+        db_manager = req.app.state.db_manager
+        api = await get_bilibili_api()
+        
+        # 同步到B站
+        bilibili_success = await api.modify_user_group(request.uid, request.group_id)
+        
+        # 更新本地数据库
+        db_success = await db_manager.update_user_group(request.uid, request.group_id)
+        
+        if db_success:
+            message = "分组更新成功"
+            if not bilibili_success:
+                message += "（本地更新成功，B站同步失败）"
+            return {"message": message, "bilibili_synced": bilibili_success}
+        else:
+            raise HTTPException(status_code=400, detail="分组更新失败")
+    except Exception as e:
+        logger.error(f"更新用户分组失败: {e}")
+        raise HTTPException(status_code=500, detail="更新用户分组失败")
+
+
+@router.post("/batch-update-group")
+async def batch_update_user_group(request: BatchGroupUpdateRequest, req: Request):
+    """批量更新用户分组"""
+    if not request.uids:
+        raise HTTPException(status_code=400, detail="用户ID列表不能为空")
+    
+    try:
+        db_manager = req.app.state.db_manager
+        api = await get_bilibili_api()
+        
+        success_count = 0
+        error_count = 0
+        bilibili_sync_errors = 0
+        
+        for uid in request.uids:
+            try:
+                # 同步到B站
+                bilibili_success = await api.modify_user_group(uid, request.group_id)
+                if not bilibili_success:
+                    bilibili_sync_errors += 1
+                
+                # 更新本地数据库
+                db_success = await db_manager.update_user_group(uid, request.group_id)
+                
+                if db_success:
+                    success_count += 1
+                else:
+                    error_count += 1
+            except Exception as e:
+                logger.error(f"批量更新用户 {uid} 分组时出错: {e}")
+                error_count += 1
+        
+        return {
+            "message": f"批量分组更新完成：成功 {success_count}，失败 {error_count}",
+            "success_count": success_count,
+            "error_count": error_count,
+            "bilibili_sync_errors": bilibili_sync_errors
+        }
+    except Exception as e:
+        logger.error(f"批量更新分组失败: {e}")
+        raise HTTPException(status_code=500, detail="批量更新分组失败")
+
+
+@router.get("/debug/data-status")
+async def debug_data_status(req: Request):
+    """调试：检查数据状态"""
+    try:
+        db_manager = req.app.state.db_manager
+        
+        # 检查关注用户总数
+        total_users = await db_manager.get_following_count()
+        
+        # 检查分组数量
+        groups = await db_manager.get_follow_groups()
+        
+        # 检查未分组用户数量
+        ungrouped_count = await db_manager.get_following_count_by_group(0)
+        
+        # 检查每个分组的用户数量
+        group_details = []
+        for group in groups:
+            group_id = group['group_id']
+            actual_count = await db_manager.get_following_count_by_group(group_id)
+            group_details.append({
+                "group_id": group_id,
+                "group_name": group['group_name'],
+                "stored_count": group.get('actual_count', 0),
+                "real_count": actual_count
+            })
+        
+        # 随机抽取一些用户数据检查
+        sample_users = await db_manager.get_following_list(limit=5)
+        
+        return {
+            "total_users": total_users,
+            "total_groups": len(groups),
+            "ungrouped_users": ungrouped_count,
+            "group_details": group_details,
+            "sample_users": [
+                {
+                    "uid": user.get('uid'),
+                    "uname": user.get('uname'),
+                    "group_id": user.get('group_id'),
+                    "category": user.get('category')
+                } for user in sample_users
+            ]
+        }
+    except Exception as e:
+        logger.error(f"获取调试数据失败: {e}")
+        raise HTTPException(status_code=500, detail="获取调试数据失败") 
