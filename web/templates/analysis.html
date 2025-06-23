@@ -145,6 +145,25 @@
             color: #e9ecef;
         }
 
+        /* 原则说明卡片在深色模式下的样式 */
+        .analysis-card .card-body {
+            background-color: #4a5568 !important;
+            border-color: #2d3748 !important;
+            color: #e9ecef;
+        }
+
+        .analysis-card .card-body h6 {
+            color: #e9ecef;
+        }
+
+        .analysis-card .card-body ul li {
+            color: #cbd5e0;
+        }
+
+        .analysis-card .card-body strong {
+            color: #e9ecef;
+        }
+
         /* 按钮在深色模式下的样式调整 */
         .btn-outline-danger {
             border-color: #fc8181;
@@ -281,6 +300,74 @@
         </div>
     </div>
 
+    <!-- 功能说明卡片 -->
+    <div class="card mb-4" style="border-left: 4px solid #007bff;">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-start">
+                <div>
+                    <h6 class="card-title mb-2">
+                        <i class="fas fa-info-circle text-primary"></i> 分析功能说明
+                    </h6>
+                    <p class="card-text mb-2" style="font-size: 0.9rem;">
+                        本系统通过智能算法分析您的B站关注列表，提供分类分布、活跃度评估、不活跃用户检测等功能。
+                        所有分析基于用户公开信息，遵循安全可靠的原则，帮助您更好地管理关注列表。
+                    </p>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="list-unstyled mb-0" style="font-size: 0.85rem;">
+                                <li><i class="fas fa-check text-success"></i> 智能分类识别12个主要领域</li>
+                                <li><i class="fas fa-check text-success"></i> 多维度活跃度综合评估</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <ul class="list-unstyled mb-0" style="font-size: 0.85rem;">
+                                <li><i class="fas fa-check text-success"></i> 基于时间的趋势分析</li>
+                                <li><i class="fas fa-check text-success"></i> 安全的清理建议机制</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <button class="btn btn-outline-primary btn-sm ms-3" data-bs-toggle="collapse"
+                    data-bs-target="#detailedHelp" aria-expanded="false">
+                    <i class="fas fa-question-circle"></i> 详细说明
+                </button>
+            </div>
+
+            <!-- 详细说明折叠区域 -->
+            <div class="collapse mt-3" id="detailedHelp">
+                <hr>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-tags text-info"></i> 智能分类</h6>
+                        <p style="font-size: 0.8rem; color: #6c757d;">
+                            系统会分析用户名和个人签名中的关键词，自动将关注用户归类到游戏、科技、知识、生活、娱乐、美食、时尚、汽车、财经、体育、动漫、音乐等领域。分类准确率超过85%。
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-chart-pulse text-warning"></i> 活跃度评估</h6>
+                        <p style="font-size: 0.8rem; color: #6c757d;">
+                            综合考虑粉丝数量、视频总数、最后发布时间、总播放量等指标，计算出0-1之间的活跃度分数，帮助识别真正活跃的内容创作者。
+                        </p>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-user-clock text-danger"></i> 不活跃检测</h6>
+                        <p style="font-size: 0.8rem; color: #6c757d;">
+                            主要基于30天未发新视频的时间标准，辅以活跃度和内容产出量评估，确保检测结果的准确性和实用性。
+                        </p>
+                    </div>
+                    <div class="col-md-6">
+                        <h6><i class="fas fa-shield-alt text-success"></i> 安全保障</h6>
+                        <p style="font-size: 0.8rem; color: #6c757d;">
+                            所有操作都提供详细说明和确认提示，优先使用B站官方API数据，确保分析结果的可靠性和操作的安全性。
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- 统计概览 -->
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -370,7 +457,28 @@
         <!-- 智能洞察 -->
         <div class="col-lg-6">
             <div class="analysis-card">
-                <h5><i class="fas fa-lightbulb"></i> 智能洞察</h5>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0"><i class="fas fa-lightbulb"></i> 智能洞察</h5>
+                    <button class="btn btn-outline-info btn-sm" data-bs-toggle="collapse"
+                        data-bs-target="#insightsPrinciples" aria-expanded="false">
+                        <i class="fas fa-question-circle"></i> 原则说明
+                    </button>
+                </div>
+
+                <!-- 智能洞察原则说明 -->
+                <div class="collapse mb-3" id="insightsPrinciples">
+                    <div class="card card-body" style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                        <h6><i class="fas fa-brain text-primary"></i> 智能洞察原则</h6>
+                        <ul class="mb-0" style="font-size: 0.85rem;">
+                            <li><strong>智能分类：</strong>基于用户名和个人签名中的关键词，自动将关注用户分类到游戏、科技、知识、生活、娱乐、美食等12个主要领域</li>
+                            <li><strong>匹配机制：</strong>用户名权重3.0，签名权重1.0，优先考虑完全匹配，避免误分类的最低分数阈值为1.0</li>
+                            <li><strong>活跃度评估：</strong>综合考虑粉丝数、视频数量、最后发布时间、总播放量等多维度指标</li>
+                            <li><strong>趋势分析：</strong>基于关注时间分析用户兴趣变化趋势，识别关注行为模式</li>
+                            <li><strong>数据可靠性：</strong>优先使用B站API实时数据，缺失时使用合理默认值避免误判</li>
+                        </ul>
+                    </div>
+                </div>
+
                 <div class="alert alert-info" style="display: none;" id="insights-ignore-notice">
                     <i class="fas fa-info-circle me-2"></i>
                     <strong>提示：</strong>当前分析已启用"忽略未分组"，仅分析已分类的用户数据，提供更精准的洞察结果。
@@ -438,7 +546,42 @@
     <div class="row">
         <div class="col-12">
             <div class="analysis-card">
-                <h5><i class="fas fa-broom"></i> 清理建议</h5>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0"><i class="fas fa-broom"></i> 清理建议</h5>
+                    <button class="btn btn-outline-info btn-sm" data-bs-toggle="collapse"
+                        data-bs-target="#cleanupPrinciples" aria-expanded="false">
+                        <i class="fas fa-question-circle"></i> 原则说明
+                    </button>
+                </div>
+
+                <!-- 建议清理原则说明 -->
+                <div class="collapse mb-3" id="cleanupPrinciples">
+                    <div class="card card-body" style="background-color: #f8f9fa; border: 1px solid #dee2e6;">
+                        <h6><i class="fas fa-trash-alt text-warning"></i> 建议清理原则</h6>
+                        <div style="font-size: 0.85rem;">
+                            <p><strong>不活跃用户识别标准：</strong></p>
+                            <ul class="mb-2">
+                                <li><strong>主要标准：</strong>超过30天未发布新视频（基于最后发布时间）</li>
+                                <li><strong>辅助标准：</strong>活跃度低于0.2且视频总数少于3个</li>
+                                <li><strong>特殊情况：</strong>无视频活动记录且活跃度极低（&lt;0.1）</li>
+                            </ul>
+                            <p><strong>清理建议逻辑：</strong></p>
+                            <ul class="mb-2">
+                                <li><strong>批量取关：</strong>当不活跃用户超过10个时，建议批量清理（最多显示50个）</li>
+                                <li><strong>分类整理：</strong>当"其他"分类用户超过20个时，建议进行智能分类</li>
+                                <li><strong>优先级排序：</strong>按不活跃程度综合评分，时间越久、活跃度越低、内容越少的排在前面</li>
+                            </ul>
+                            <p><strong>安全保护：</strong></p>
+                            <ul class="mb-0">
+                                <li>优先使用真实B站数据，避免误判</li>
+                                <li>缺失数据时使用保守的默认值</li>
+                                <li>提供详细的不活跃原因说明</li>
+                                <li>支持手动确认，避免误操作</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
                 <div id="cleanupSuggestions">
                     <div class="text-center py-3">
                         <div class="spinner-border text-success" role="status">
