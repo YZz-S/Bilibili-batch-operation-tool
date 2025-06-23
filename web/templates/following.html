@@ -108,6 +108,10 @@
 
 {% block content %}
 <div class="container-fluid">
+    <!-- 消息提示容器 -->
+    <div id="message-container" class="mb-3">
+    </div>
+
     <!-- 页面标题 -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
@@ -166,7 +170,7 @@
     <div class="card mb-4" id="batchOperations" style="display: none;">
         <div class="card-body">
             <div class="row align-items-center">
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <div class="form-check">
                         <input class="form-check-input" type="checkbox" id="selectAll" onchange="toggleSelectAll()">
                         <label class="form-check-label" for="selectAll">
@@ -174,7 +178,13 @@
                         </label>
                     </div>
                 </div>
-                <div class="col-md-9">
+                <div class="col-md-2">
+                    <select class="form-select form-select-sm" id="batchCategory">
+                        <option value="">选择分类</option>
+                        <!-- 分类选项将在这里动态加载 -->
+                    </select>
+                </div>
+                <div class="col-md-8">
                     <div class="btn-group" role="group">
                         <button class="btn btn-success btn-sm" onclick="syncFollowing()">
                             <i class="fas fa-sync"></i> 同步关注列表

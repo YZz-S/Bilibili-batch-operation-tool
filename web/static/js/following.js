@@ -42,7 +42,7 @@ async function loadFollowingList(silent = false) {
             updateSortUI();
 
             if (!silent) {
-                showNotification('数据加载成功', 'success');
+                showMessage('数据加载成功', 'success');
             }
         } else {
             throw new Error(result.message || '加载失败');
@@ -50,7 +50,7 @@ async function loadFollowingList(silent = false) {
     } catch (error) {
         console.error('加载关注列表失败:', error);
         if (!silent) {
-            showNotification('加载关注列表失败: ' + error.message, 'error');
+            showMessage('加载关注列表失败: ' + error.message, 'danger');
         }
     } finally {
         if (!silent) {
@@ -173,43 +173,43 @@ function renderPagination(pagination) {
 
     // 上一页
     html += `
-            < li class="page-item ${page <= 1 ? 'disabled' : ''}" >
-                <a class="page-link" href="#" onclick="changePage(${page - 1})">上一页</a>
-        </li >
-            `;
+        <li class="page-item ${page <= 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="changePage(${page - 1})">上一页</a>
+        </li>
+    `;
 
     // 页码
     const start = Math.max(1, page - 2);
     const end = Math.min(pages, page + 2);
 
     if (start > 1) {
-        html += `< li class="page-item" > <a class="page-link" href="#" onclick="changePage(1)">1</a></li > `;
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(1)">1</a></li>`;
         if (start > 2) {
-            html += `< li class="page-item disabled" > <span class="page-link">...</span></li > `;
+            html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
         }
     }
 
     for (let i = start; i <= end; i++) {
         html += `
-            < li class="page-item ${i === page ? 'active' : ''}" >
+            <li class="page-item ${i === page ? 'active' : ''}">
                 <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
-            </li >
-            `;
+            </li>
+        `;
     }
 
     if (end < pages) {
         if (end < pages - 1) {
-            html += `< li class="page-item disabled" > <span class="page-link">...</span></li > `;
+            html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
         }
-        html += `< li class="page-item" > <a class="page-link" href="#" onclick="changePage(${pages})">${pages}</a></li > `;
+        html += `<li class="page-item"><a class="page-link" href="#" onclick="changePage(${pages})">${pages}</a></li>`;
     }
 
     // 下一页
     html += `
-            < li class="page-item ${page >= pages ? 'disabled' : ''}" >
-                <a class="page-link" href="#" onclick="changePage(${page + 1})">下一页</a>
-        </li >
-            `;
+        <li class="page-item ${page >= pages ? 'disabled' : ''}">
+            <a class="page-link" href="#" onclick="changePage(${page + 1})">下一页</a>
+        </li>
+    `;
 
     paginationElement.innerHTML = html;
 }
@@ -219,18 +219,29 @@ function renderPagination(pagination) {
  */
 function renderCategoryOptions() {
     const categoryFilter = document.getElementById('categoryFilter');
-    const batchCategory = document.getElementById('batchCategory');
+
+    if (!categoryFilter) {
+        console.warn('categoryFilter 元素未找到');
+        return;
+    }
 
     let options = '<option value="">所有分类</option>';
-    let batchOptions = '<option value="">选择分类</option>';
 
     categories.forEach(cat => {
-        options += `< option value = "${cat.category}" > ${cat.category} (${cat.count})</option > `;
-        batchOptions += `< option value = "${cat.category}" > ${cat.category}</option > `;
+        options += `<option value="${cat.category}">${cat.category} (${cat.count})</option>`;
     });
 
     categoryFilter.innerHTML = options;
-    batchCategory.innerHTML = batchOptions;
+
+    // 只在batchCategory元素存在时更新它
+    const batchCategory = document.getElementById('batchCategory');
+    if (batchCategory) {
+        let batchOptions = '<option value="">选择分类</option>';
+        categories.forEach(cat => {
+            batchOptions += `<option value="${cat.category}">${cat.category}</option>`;
+        });
+        batchCategory.innerHTML = batchOptions;
+    }
 }
 
 /**
@@ -390,7 +401,7 @@ async function syncFollowing() {
         const result = await response.json();
 
         if (response.ok) {
-            showNotification('同步任务已启动，请稍后刷新页面查看结果', 'success');
+            showMessage('同步任务已启动，请稍后刷新页面查看结果', 'success');
 
             // 延迟刷新数据
             setTimeout(() => {
@@ -402,7 +413,7 @@ async function syncFollowing() {
         }
     } catch (error) {
         console.error('同步失败:', error);
-        showNotification('同步失败: ' + error.message, 'error');
+        showMessage('同步失败: ' + error.message, 'danger');
     } finally {
         hideLoading();
     }
@@ -422,15 +433,19 @@ async function autoCategories() {
         const result = await response.json();
 
         if (response.ok) {
-            showNotification(result.message, 'success');
-            loadFollowingList();
-            loadCategories();
+            showMessage(result.message, 'success');
+
+            // 刷新数据
+            setTimeout(() => {
+                loadFollowingList();
+                loadCategories();
+            }, 2000);
         } else {
             throw new Error(result.message || '自动分类失败');
         }
     } catch (error) {
         console.error('自动分类失败:', error);
-        showNotification('自动分类失败: ' + error.message, 'error');
+        showMessage('自动分类失败: ' + error.message, 'danger');
     } finally {
         hideLoading();
     }
@@ -441,41 +456,51 @@ async function autoCategories() {
  */
 async function batchUpdateCategory() {
     const batchCategory = document.getElementById('batchCategory');
-    const category = batchCategory.value;
 
+    if (!batchCategory) {
+        showMessage('批量分类功能暂不可用', 'warning');
+        return;
+    }
+
+    const category = batchCategory.value;
     if (!category) {
-        showNotification('请选择分类', 'warning');
+        showMessage('请选择分类', 'warning');
         return;
     }
 
     if (selectedUsers.size === 0) {
-        showNotification('请先选择用户', 'warning');
+        showMessage('请先选择用户', 'warning');
         return;
     }
 
     try {
         showLoading();
 
-        const promises = Array.from(selectedUsers).map(uid =>
-            fetch('/api/bilibili/update-category', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({ uid, category })
+        const response = await fetch('/api/bilibili/batch-update-category', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                uids: Array.from(selectedUsers),
+                category: category
             })
-        );
+        });
 
-        await Promise.all(promises);
+        const result = await response.json();
 
-        showNotification(`成功更新 ${selectedUsers.size} 个用户的分类`, 'success');
-        selectedUsers.clear();
-        updateSelectionUI();
-        loadFollowingList();
-        loadCategories();
+        if (response.ok) {
+            showMessage(`成功更新 ${selectedUsers.size} 个用户的分类`, 'success');
+            selectedUsers.clear();
+            updateSelectionUI();
+            loadFollowingList();
+            loadCategories();
+        } else {
+            throw new Error(result.message || '批量更新失败');
+        }
     } catch (error) {
         console.error('批量更新分类失败:', error);
-        showNotification('批量更新分类失败: ' + error.message, 'error');
+        showMessage('批量更新分类失败: ' + error.message, 'danger');
     } finally {
         hideLoading();
     }
@@ -486,7 +511,7 @@ async function batchUpdateCategory() {
  */
 async function batchUnfollow() {
     if (selectedUsers.size === 0) {
-        showNotification('请先选择用户', 'warning');
+        showMessage('请先选择用户', 'warning');
         return;
     }
 
@@ -497,18 +522,20 @@ async function batchUnfollow() {
     try {
         showLoading();
 
-        const response = await fetch('/api/bilibili/unfollow', {
+        const response = await fetch('/api/bilibili/batch-unfollow', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ uids: Array.from(selectedUsers) })
+            body: JSON.stringify({
+                uids: Array.from(selectedUsers)
+            })
         });
 
         const result = await response.json();
 
         if (response.ok) {
-            showNotification(result.message, 'success');
+            showMessage(result.message, 'success');
             selectedUsers.clear();
             updateSelectionUI();
             loadFollowingList();
@@ -518,7 +545,7 @@ async function batchUnfollow() {
         }
     } catch (error) {
         console.error('批量取消关注失败:', error);
-        showNotification('批量取消关注失败: ' + error.message, 'error');
+        showMessage('批量取消关注失败: ' + error.message, 'danger');
     } finally {
         hideLoading();
     }
@@ -528,14 +555,20 @@ async function batchUnfollow() {
  * 显示加载状态
  */
 function showLoading() {
-    document.getElementById('loadingOverlay').style.display = 'flex';
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'flex';
+    }
 }
 
 /**
  * 隐藏加载状态
  */
 function hideLoading() {
-    document.getElementById('loadingOverlay').style.display = 'none';
+    const loadingOverlay = document.getElementById('loadingOverlay');
+    if (loadingOverlay) {
+        loadingOverlay.style.display = 'none';
+    }
 }
 
 /**
@@ -550,5 +583,100 @@ function updateSortUI() {
     }
     if (sortOrder) {
         sortOrder.value = currentSortOrder;
+    }
+}
+
+/**
+ * 更新单个用户分类
+ */
+async function updateUserCategory(uid) {
+    // 获取当前用户信息
+    const user = allUsers.find(u => u.uid === uid);
+    if (!user) {
+        showMessage('用户信息未找到', 'danger');
+        return;
+    }
+
+    // 创建分类选择提示
+    const categoryOptions = categories.map(cat => cat.category).join('\n');
+    const newCategory = prompt(`请为用户 ${user.uname} 选择新分类：\n\n可选分类：\n${categoryOptions}\n\n或输入新分类名称：`, user.category || '');
+
+    if (newCategory === null) {
+        return; // 用户取消了操作
+    }
+
+    try {
+        showLoading();
+
+        const response = await fetch('/api/bilibili/update-category', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                uid: uid,
+                category: newCategory.trim()
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage(`成功更新用户 ${user.uname} 的分类`, 'success');
+            loadFollowingList();
+            loadCategories();
+        } else {
+            throw new Error(result.message || '更新失败');
+        }
+    } catch (error) {
+        console.error('更新用户分类失败:', error);
+        showMessage('更新用户分类失败: ' + error.message, 'danger');
+    } finally {
+        hideLoading();
+    }
+}
+
+/**
+ * 取消关注单个用户
+ */
+async function unfollowUser(uid) {
+    // 获取当前用户信息
+    const user = allUsers.find(u => u.uid === uid);
+    if (!user) {
+        showMessage('用户信息未找到', 'danger');
+        return;
+    }
+
+    if (!confirm(`确定要取消关注用户 ${user.uname} 吗？此操作不可撤销！`)) {
+        return;
+    }
+
+    try {
+        showLoading();
+
+        const response = await fetch('/api/bilibili/unfollow', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                uid: uid
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage(`成功取消关注用户 ${user.uname}`, 'success');
+            loadFollowingList();
+            loadCategories();
+        } else {
+            throw new Error(result.message || '取消关注失败');
+        }
+    } catch (error) {
+        console.error('取消关注失败:', error);
+        showMessage('取消关注失败: ' + error.message, 'danger');
+    } finally {
+        hideLoading();
     }
 } 
