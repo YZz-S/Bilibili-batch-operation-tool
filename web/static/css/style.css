@@ -104,6 +104,29 @@ body {
     height: 60px;
 }
 
+/* 头像链接样式 */
+.avatar-link {
+    display: inline-block;
+    text-decoration: none;
+    transition: all 0.3s ease;
+    border-radius: 50%;
+    overflow: hidden;
+}
+
+.avatar-link:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+}
+
+.avatar-link img {
+    display: block;
+    transition: all 0.3s ease;
+}
+
+.avatar-link:hover img {
+    filter: brightness(1.1);
+}
+
 /* 徽章样式 */
 .badge {
     font-size: 0.75rem;

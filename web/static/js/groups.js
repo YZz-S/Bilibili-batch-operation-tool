@@ -892,8 +892,10 @@ function renderUserCardDetailed(user, isSelected, avatarUrl, vipBadge, officialB
                            ${isSelected ? 'checked' : ''} 
                            onchange="toggleUserSelection(${user.uid})" />
                 </div>
-                <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
-                     onerror="this.src='/static/img/default-avatar.svg'" />
+                <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname} 的主页">
+                    <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
+                         onerror="this.src='/static/img/default-avatar.svg'" />
+                </a>
                 <div class="user-info">
                     <div class="user-name">
                         ${user.uname}${vipBadge}${officialBadge}
@@ -926,8 +928,10 @@ function renderUserCardGrid(user, isSelected, avatarUrl, vipBadge, officialBadge
                        ${isSelected ? 'checked' : ''} 
                        onchange="toggleUserSelection(${user.uid})" />
             </div>
-            <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
-                 onerror="this.src='/static/img/default-avatar.svg'" />
+            <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname} 的主页">
+                <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
+                     onerror="this.src='/static/img/default-avatar.svg'" />
+            </a>
             <div class="user-info">
                 <div class="user-name">
                     ${user.uname}${vipBadge}${officialBadge}
@@ -961,8 +965,10 @@ function renderUserCardCompact(user, isSelected, avatarUrl, vipBadge, officialBa
                        ${isSelected ? 'checked' : ''} 
                        onchange="toggleUserSelection(${user.uid})" />
             </div>
-            <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
-                 onerror="this.src='/static/img/default-avatar.svg'" />
+            <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname} 的主页">
+                <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar"
+                     onerror="this.src='/static/img/default-avatar.svg'" />
+            </a>
             <div class="user-info">
                 <div class="user-name">
                     ${user.uname}${vipBadge}${officialBadge}
