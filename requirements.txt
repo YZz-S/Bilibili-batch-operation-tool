@@ -1,0 +1,16 @@
+fastapi==0.104.1
+uvicorn==0.24.0
+requests==2.31.0
+pandas==2.1.4
+sqlite3-python==0.4.3
+jinja2==3.1.2
+python-multipart==0.0.6
+beautifulsoup4==4.12.2
+lxml==4.9.3
+aiofiles==23.2.0
+httpx==0.25.2
+pydantic==2.5.0
+numpy==1.24.4
+matplotlib==3.8.2
+seaborn==0.13.0
+plotly==5.17.0 
