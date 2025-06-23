@@ -27,6 +27,7 @@ class BilibiliAPI:
         self.api_delay = get_config_value("bilibili.api_delay", 1.0)
         self.retry_times = get_config_value("bilibili.retry_times", 3)
         self.timeout = get_config_value("bilibili.timeout", 30)
+        self.fetch_user_details = get_config_value("bilibili.fetch_user_details", True)
         
         # API端点
         self.endpoints = {
@@ -74,8 +75,25 @@ class BilibiliAPI:
                         if data.get("code") == 0:
                             return data.get("data", {})
                         else:
+                            error_code = data.get('code')
                             error_msg = data.get('message', '未知错误')
-                            self.logger.warning(f"API返回错误: {error_msg} (code: {data.get('code')})")
+                            self.logger.warning(f"API返回错误: {error_msg} (code: {error_code})")
+                            
+                            # 对特定错误代码进行特殊处理
+                            if error_code == -352:
+                                self.logger.error("遇到风控限制 (-352)，建议检查以下项目：")
+                                self.logger.error("1. Cookie是否有效")
+                                self.logger.error("2. 是否触发了API频率限制")
+                                self.logger.error("3. 账号是否被风控")
+                                self.logger.error("等待更长时间后重试...")
+                                await asyncio.sleep(5)  # 遇到风控错误时等待更长时间
+                            elif error_code == -503:
+                                self.logger.warning("API调用过于频繁，等待后重试...")
+                                await asyncio.sleep(3)
+                            elif error_code in [-101, -102]:
+                                self.logger.error("账号登录状态异常，请检查Cookie")
+                                return None
+                            
                             # 记录更多详细信息
                             self.logger.debug(f"完整API响应: {data}")
                             return None
@@ -112,12 +130,22 @@ class BilibiliAPI:
         
         return result
     
-    async def get_all_following(self, progress_callback=None) -> List[Dict[str, Any]]:
-        """获取所有关注用户"""
+    async def get_all_following(self, progress_callback=None, fetch_user_details=None) -> List[Dict[str, Any]]:
+        """获取所有关注用户
+        
+        Args:
+            progress_callback: 进度回调函数
+            fetch_user_details: 是否获取用户详细信息（包括等级），如果为None则使用配置文件设置
+        """
+        if fetch_user_details is None:
+            fetch_user_details = self.fetch_user_details
+            
         all_following = []
         page = 1
         page_size = 50
         invalid_users = 0
+        
+        self.logger.info(f"开始获取关注列表，获取用户详细信息: {'开启' if fetch_user_details else '关闭'}")
         
         while True:
             data = await self.get_following_list(pn=page, ps=page_size)
@@ -134,6 +162,10 @@ class BilibiliAPI:
                 else:
                     invalid_users += 1
                     self.logger.warning(f"发现无效用户数据: {user}")
+            
+            # 批量获取用户详细信息
+            if fetch_user_details and valid_users:
+                valid_users = await self._batch_enrich_user_info(valid_users)
             
             all_following.extend(valid_users)
             
@@ -152,6 +184,70 @@ class BilibiliAPI:
         
         self.logger.info(f"获取关注列表完成，总计: {len(all_following)} 个用户，跳过无效用户: {invalid_users}")
         return all_following
+    
+    async def _batch_enrich_user_info(self, users: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """批量获取用户详细信息以补充等级等字段"""
+        enriched_users = []
+        consecutive_failures = 0
+        base_delay = 0.5
+        
+        for i, user in enumerate(users):
+            try:
+                uid = user.get('uid') or user.get('mid')
+                
+                # 获取用户详细信息
+                user_detail = await self.get_user_info(uid)
+                if user_detail and user_detail.get('card'):
+                    card_info = user_detail['card']
+                    
+                    # 更新用户等级信息
+                    if 'level_info' in card_info:
+                        user['level'] = card_info['level_info'].get('current_level', 0)
+                        self.logger.debug(f"获取用户 {user.get('uname', 'Unknown')} 等级: {user['level']}")
+                    
+                    # 更新其他可能缺失的字段
+                    if 'face' not in user or not user['face']:
+                        user['face'] = card_info.get('face', '')
+                    if 'sign' not in user or not user['sign']:
+                        user['sign'] = card_info.get('sign', '')
+                    
+                    # 成功获取，重置失败计数
+                    consecutive_failures = 0
+                elif user_detail is None:
+                    # API调用失败，增加失败计数
+                    consecutive_failures += 1
+                    self.logger.warning(f"获取用户 {user.get('uname', 'Unknown')} 详细信息失败，连续失败 {consecutive_failures} 次")
+                    
+                    # 如果连续失败次数过多，增加延迟时间
+                    if consecutive_failures >= 3:
+                        extended_delay = base_delay * (2 ** min(consecutive_failures - 2, 4))
+                        self.logger.warning(f"连续失败次数过多，延长等待时间至 {extended_delay:.1f} 秒")
+                        await asyncio.sleep(extended_delay)
+                        consecutive_failures = 0  # 重置计数器
+                
+                enriched_users.append(user)
+                
+                # 动态调整延迟时间
+                current_delay = base_delay
+                if consecutive_failures > 0:
+                    current_delay = base_delay * (1 + consecutive_failures * 0.5)
+                
+                # 每获取10个用户信息后稍微休息，避免API频率限制
+                if (i + 1) % 10 == 0:
+                    await asyncio.sleep(current_delay)
+                    self.logger.info(f"已获取 {i + 1}/{len(users)} 个用户的详细信息")
+                elif (i + 1) % 5 == 0:
+                    # 每5个用户也稍微休息一下
+                    await asyncio.sleep(current_delay * 0.5)
+                
+            except Exception as e:
+                consecutive_failures += 1
+                self.logger.error(f"获取用户 {user.get('uname', 'Unknown')} 详细信息失败: {e}")
+                # 即使获取详细信息失败，也保留原始用户数据
+                enriched_users.append(user)
+        
+        self.logger.info(f"批量获取用户详细信息完成，处理 {len(users)} 个用户")
+        return enriched_users
     
     async def unfollow_user(self, uid: int) -> bool:
         """取消关注用户"""
@@ -291,6 +387,22 @@ class BilibiliAPI:
     def is_configured(self) -> bool:
         """检查是否已配置Cookie"""
         return bool(self.cookie and self._extract_csrf_token())
+
+    async def get_user_info(self, uid: int) -> Optional[Dict[str, Any]]:
+        """获取用户详细信息"""
+        params = {
+            "mid": uid
+        }
+        
+        url = f"{self.endpoints['user_info']}?{urlencode(params)}"
+        
+        self.logger.debug(f"获取用户详细信息 - UID: {uid}")
+        result = await self._request("GET", url)
+        
+        # 添加API延迟
+        await asyncio.sleep(self.api_delay)
+        
+        return result
 
 
 # 全局API实例

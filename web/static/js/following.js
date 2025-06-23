@@ -794,4 +794,41 @@ function onPageSizeChange() {
         currentPage = 1; // 重置到第一页
         loadFollowingList();
     }
+}
+
+/**
+ * 修复用户等级信息
+ */
+async function fixUserLevels() {
+    if (!confirm('确定要修复所有用户的等级信息吗？这个过程可能需要一些时间，请耐心等待。')) {
+        return;
+    }
+
+    try {
+        showLoading();
+        showMessage('正在修复用户等级信息，请耐心等待...', 'info');
+
+        const response = await fetch('/api/bilibili/fix-user-levels', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage(`等级信息修复完成！总计处理 ${result.total_users} 个用户，成功修复 ${result.fixed_count} 个，失败 ${result.error_count} 个`, 'success');
+
+            // 刷新页面数据
+            await loadFollowingList();
+        } else {
+            throw new Error(result.detail || '修复失败');
+        }
+    } catch (error) {
+        console.error('修复用户等级信息失败:', error);
+        showMessage('修复用户等级信息失败: ' + error.message, 'danger');
+    } finally {
+        hideLoading();
+    }
 } 

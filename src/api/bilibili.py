@@ -536,4 +536,110 @@ async def debug_data_status(req: Request):
         }
     except Exception as e:
         logger.error(f"获取调试数据失败: {e}")
-        raise HTTPException(status_code=500, detail="获取调试数据失败") 
+        raise HTTPException(status_code=500, detail="获取调试数据失败")
+
+
+@router.post("/fix-user-levels")
+async def fix_user_levels(req: Request):
+    """修复用户等级信息"""
+    try:
+        db_manager = req.app.state.db_manager
+        api = await get_bilibili_api()
+        
+        logger.info("开始修复用户等级信息...")
+        
+        # 获取所有等级为0的用户
+        following_list = await db_manager.get_following_list()
+        users_to_fix = [user for user in following_list if user.get('level', 0) == 0]
+        
+        if not users_to_fix:
+            return {"message": "没有需要修复的用户", "fixed_count": 0}
+        
+        logger.info(f"发现 {len(users_to_fix)} 个需要修复等级信息的用户")
+        
+        fixed_count = 0
+        error_count = 0
+        wind_control_detected = False
+        consecutive_failures = 0
+        
+        for i, user in enumerate(users_to_fix):
+            try:
+                uid = user.get('uid')
+                if not uid:
+                    continue
+                
+                # 检测风控情况
+                if consecutive_failures >= 5:
+                    logger.warning("检测到可能的风控限制，暂停修复过程")
+                    wind_control_detected = True
+                    break
+                
+                # 获取用户详细信息
+                user_detail = await api.get_user_info(uid)
+                if user_detail and user_detail.get('card'):
+                    card_info = user_detail['card']
+                    
+                    if 'level_info' in card_info:
+                        new_level = card_info['level_info'].get('current_level', 0)
+                        
+                        # 更新数据库中的等级信息
+                        if new_level > 0:
+                            await db_manager._connection.execute(
+                                "UPDATE following_list SET level = ? WHERE uid = ?",
+                                (new_level, uid)
+                            )
+                            await db_manager._connection.commit()
+                            fixed_count += 1
+                            consecutive_failures = 0  # 成功时重置失败计数
+                            logger.debug(f"用户 {user.get('uname', 'Unknown')} 等级已更新: {new_level}")
+                        else:
+                            logger.debug(f"用户 {user.get('uname', 'Unknown')} 等级仍为0，可能是真实等级")
+                    else:
+                        consecutive_failures += 1
+                        logger.warning(f"用户 {user.get('uname', 'Unknown')} 等级信息不可用")
+                elif user_detail is None:
+                    # API调用失败
+                    consecutive_failures += 1
+                    error_count += 1
+                    logger.warning(f"获取用户 {user.get('uname', 'Unknown')} 详细信息失败，连续失败 {consecutive_failures} 次")
+                    
+                    # 如果连续失败过多，增加等待时间
+                    if consecutive_failures >= 3:
+                        wait_time = min(consecutive_failures * 2, 10)
+                        logger.warning(f"连续失败过多，等待 {wait_time} 秒")
+                        await asyncio.sleep(wait_time)
+                
+                # 每修复10个用户后稍微休息
+                if (i + 1) % 10 == 0:
+                    base_delay = 1.0 if consecutive_failures == 0 else min(consecutive_failures * 0.5, 3.0)
+                    await asyncio.sleep(base_delay)
+                    logger.info(f"已处理 {i + 1}/{len(users_to_fix)} 个用户，成功修复 {fixed_count} 个")
+                elif (i + 1) % 5 == 0:
+                    # 每5个用户也稍微休息
+                    await asyncio.sleep(0.3)
+                
+            except Exception as e:
+                error_count += 1
+                consecutive_failures += 1
+                logger.error(f"修复用户 {user.get('uname', 'Unknown')} 等级信息失败: {e}")
+        
+        # 构建返回消息
+        if wind_control_detected:
+            message = f"等级信息修复因风控限制而停止"
+        else:
+            message = f"等级信息修复完成"
+        
+        logger.info(f"修复结果: 处理 {min(i + 1, len(users_to_fix))} 个用户，成功修复 {fixed_count} 个，失败 {error_count} 个")
+        
+        return {
+            "message": message,
+            "total_users": len(users_to_fix),
+            "processed_users": min(i + 1, len(users_to_fix)) if 'i' in locals() else 0,
+            "fixed_count": fixed_count,
+            "error_count": error_count,
+            "wind_control_detected": wind_control_detected
+        }
+        
+    except Exception as e:
+        logger.error(f"修复用户等级信息失败: {e}")
+        raise HTTPException(status_code=500, detail="修复用户等级信息失败") 
