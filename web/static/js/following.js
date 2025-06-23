@@ -12,6 +12,7 @@ let currentSortOrder = 'desc';
 let selectedUsers = new Set();
 let allUsers = [];
 let categories = [];
+let pageSize = 50; // 默认每页50个
 
 /**
  * 加载关注列表
@@ -24,7 +25,7 @@ async function loadFollowingList(silent = false) {
 
         const params = new URLSearchParams({
             page: currentPage,
-            page_size: 20,
+            page_size: pageSize,
             category: currentCategory,
             search: currentSearch,
             sort_by: currentSort,
@@ -780,5 +781,17 @@ async function unfollowUser(uid) {
         showMessage('取消关注失败: ' + error.message, 'danger');
     } finally {
         hideLoading();
+    }
+}
+
+/**
+ * 每页显示数量变化处理
+ */
+function onPageSizeChange() {
+    const pageSizeSelect = document.getElementById('pageSizeSelect');
+    if (pageSizeSelect) {
+        pageSize = parseInt(pageSizeSelect.value);
+        currentPage = 1; // 重置到第一页
+        loadFollowingList();
     }
 } 

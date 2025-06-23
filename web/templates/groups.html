@@ -336,12 +336,20 @@
                         <p class="text-muted" id="groupContentDescription">从左侧分组列表中选择一个分组</p>
                     </div>
                     <div id="groupContentActions" style="display: none;">
-                        <div class="input-group">
-                            <input type="text" class="form-control" id="userSearchInput" placeholder="搜索用户..."
-                                onkeyup="searchUsers()">
-                            <button class="btn btn-outline-primary" onclick="loadGroupUsers(true)">
-                                <i class="bi bi-arrow-clockwise"></i>
-                            </button>
+                        <div class="d-flex gap-2">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="userSearchInput" placeholder="搜索用户..."
+                                    onkeyup="searchUsers()">
+                                <button class="btn btn-outline-primary" onclick="loadGroupUsers(true)">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+                            <select class="form-select" id="pageSizeSelect" style="width: 120px;"
+                                onchange="onPageSizeChange()">
+                                <option value="20">每页20个</option>
+                                <option value="50" selected>每页50个</option>
+                                <option value="100">每页100个</option>
+                            </select>
                         </div>
                     </div>
                 </div>

@@ -11,6 +11,7 @@ let selectedUsers = new Set();
 let currentPage = 1;
 let currentSearch = '';
 let totalPages = 1;
+let pageSize = 50; // 默认每页50个
 
 /**
  * 显示加载状态
@@ -191,7 +192,7 @@ async function loadGroupUsers(silent = false) {
 
         const params = new URLSearchParams({
             page: currentPage,
-            page_size: 20,
+            page_size: pageSize,
             search: currentSearch
         });
 
@@ -877,4 +878,16 @@ function editGroup(groupId) {
  */
 function deleteGroup(groupId) {
     showMessage('删除分组功能暂未实现', 'info');
+}
+
+/**
+ * 每页显示数量变化处理
+ */
+function onPageSizeChange() {
+    const pageSizeSelect = document.getElementById('pageSizeSelect');
+    if (pageSizeSelect) {
+        pageSize = parseInt(pageSizeSelect.value);
+        currentPage = 1; // 重置到第一页
+        loadGroupUsers();
+    }
 } 

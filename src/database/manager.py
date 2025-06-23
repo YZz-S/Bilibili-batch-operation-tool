@@ -359,17 +359,20 @@ class DatabaseManager:
             columns = [description[0] for description in cursor.description]
             groups = [dict(zip(columns, row)) for row in rows]
             
-            # 添加未分组用户统计（作为特殊分组）
-            ungrouped_count = await self.get_following_count_by_group(0)
-            if ungrouped_count > 0:
-                groups.insert(0, {
-                    'group_id': 0,
-                    'group_name': '未分组',
-                    'group_count': ungrouped_count,
-                    'actual_count': ungrouped_count,
-                    'created_at': None,
-                    'updated_at': None
-                })
+            # 检查是否已有默认分组(group_id=0)，如果没有则添加未分组统计
+            has_default_group = any(g['group_id'] == 0 for g in groups)
+            ungrouped_count = 0
+            if not has_default_group:
+                ungrouped_count = await self.get_following_count_by_group(0)
+                if ungrouped_count > 0:
+                    groups.insert(0, {
+                        'group_id': 0,
+                        'group_name': '未分组',
+                        'group_count': ungrouped_count,
+                        'actual_count': ungrouped_count,
+                        'created_at': None,
+                        'updated_at': None
+                    })
             
             self.logger.debug(f"获取到 {len(groups)} 个分组，未分组用户 {ungrouped_count} 个")
             return groups
