@@ -191,15 +191,39 @@ class DatabaseManager:
                     WHERE uid = ?
                 '''
                 
+                # 正确提取VIP信息
+                vip_info = user_data.get('vip', {})
+                vip_type = 0
+                vip_status = 0
+                if isinstance(vip_info, dict):
+                    vip_type = vip_info.get('vipType', 0)
+                    vip_status = vip_info.get('vipStatus', 0)
+                else:
+                    # 兼容旧数据格式
+                    vip_type = user_data.get('vip_type', 0)
+                    vip_status = user_data.get('vip_status', 0)
+                
+                # 正确提取认证信息
+                official_verify = user_data.get('official_verify', {})
+                official_type = -1
+                official_title = ''
+                if isinstance(official_verify, dict):
+                    official_type = official_verify.get('type', -1)
+                    official_title = official_verify.get('desc', '')
+                else:
+                    # 兼容旧数据格式
+                    official_type = user_data.get('official_type', -1)
+                    official_title = user_data.get('official_title', '')
+                
                 await self._connection.execute(sql, (
                     user_data.get('uname', ''),
                     user_data.get('face', ''),
                     user_data.get('sign', ''),
                     user_data.get('level', 0),
-                    user_data.get('vip', {}).get('vipType', 0),  # B站API使用vipType
-                    user_data.get('vip', {}).get('vipStatus', 0),  # B站API使用vipStatus
-                    user_data.get('official_verify', {}).get('type', 0),  # B站API使用official_verify
-                    user_data.get('official_verify', {}).get('desc', ''),  # B站API使用desc而不是title
+                    vip_type,
+                    vip_status,
+                    official_type,
+                    official_title,
                     user_data.get('category', ''),
                     user_data.get('mtime', 0),
                     user_data.get('mtime', 0),
@@ -219,16 +243,40 @@ class DatabaseManager:
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 '''
                 
+                # 正确提取VIP信息
+                vip_info = user_data.get('vip', {})
+                vip_type = 0
+                vip_status = 0
+                if isinstance(vip_info, dict):
+                    vip_type = vip_info.get('vipType', 0)
+                    vip_status = vip_info.get('vipStatus', 0)
+                else:
+                    # 兼容旧数据格式
+                    vip_type = user_data.get('vip_type', 0)
+                    vip_status = user_data.get('vip_status', 0)
+                
+                # 正确提取认证信息
+                official_verify = user_data.get('official_verify', {})
+                official_type = -1
+                official_title = ''
+                if isinstance(official_verify, dict):
+                    official_type = official_verify.get('type', -1)
+                    official_title = official_verify.get('desc', '')
+                else:
+                    # 兼容旧数据格式
+                    official_type = user_data.get('official_type', -1)
+                    official_title = user_data.get('official_title', '')
+                
                 await self._connection.execute(sql, (
                     uid,
                     user_data.get('uname', ''),
                     user_data.get('face', ''),
                     user_data.get('sign', ''),
                     user_data.get('level', 0),
-                    user_data.get('vip', {}).get('vipType', 0),  # B站API使用vipType
-                    user_data.get('vip', {}).get('vipStatus', 0),  # B站API使用vipStatus
-                    user_data.get('official_verify', {}).get('type', 0),  # B站API使用official_verify
-                    user_data.get('official_verify', {}).get('desc', ''),  # B站API使用desc而不是title
+                    vip_type,
+                    vip_status,
+                    official_type,
+                    official_title,
                     user_data.get('category', ''),
                     user_data.get('mtime', 0),
                     user_data.get('mtime', 0),

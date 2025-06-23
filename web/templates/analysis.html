@@ -217,14 +217,14 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2><i class="fas fa-chart-line"></i> 数据分析</h2>
-            <p class="text-muted">深入分析您的关注列表，发现有价值的洞察</p>
+            <p class="text-muted">分析您的关注列表，发现有价值的洞察</p>
         </div>
         <div>
+            <button class="btn btn-success me-2" onclick="updateCategories()">
+                <i class="fas fa-tags"></i> 更新分类
+            </button>
             <button class="btn btn-primary" onclick="refreshAnalysis()">
                 <i class="fas fa-sync-alt"></i> 刷新分析
-            </button>
-            <button class="btn btn-success" onclick="exportReport()">
-                <i class="fas fa-download"></i> 导出报告
             </button>
         </div>
     </div>
@@ -399,10 +399,35 @@
      * 更新概览统计
      */
     function updateOverviewStats(overview, inactive, suggestions) {
-        document.getElementById('totalFollowing').textContent = overview.total_following || 0;
-        document.getElementById('categorizedUsers').textContent = overview.categories?.length || 0;
+        // 更新总关注数
+        const totalFollowing = overview.total_following || 0;
+        document.getElementById('totalFollowing').textContent = totalFollowing;
+
+        // 计算已分类用户数量：排除"其他"、空分类等
+        const categories = overview.categories || [];
+        const categorizedCount = categories.reduce((sum, cat) => {
+            const category = cat.category;
+            // 排除"其他"、空字符串、null、undefined等未有效分类的情况
+            if (category && category.trim() !== '' && category !== '其他' && category !== 'null') {
+                return sum + cat.count;
+            }
+            return sum;
+        }, 0);
+        document.getElementById('categorizedUsers').textContent = categorizedCount;
+
+        // 更新不活跃用户数
         document.getElementById('inactiveUsers').textContent = inactive.total_count || 0;
-        document.getElementById('recommendCleanup').textContent = suggestions.suggestions?.length || 0;
+
+        // 计算待处理数（建议清理的用户）
+        const uncategorizedCount = categories.reduce((sum, cat) => {
+            const category = cat.category;
+            // 包括"其他"、空字符串、null、undefined等未有效分类的情况
+            if (!category || category.trim() === '' || category === '其他' || category === 'null') {
+                return sum + cat.count;
+            }
+            return sum;
+        }, 0);
+        document.getElementById('recommendCleanup').textContent = uncategorizedCount;
     }
 
     /**
@@ -718,42 +743,42 @@
     }
 
     /**
+     * 显示消息
+     */
+    function showMessage(message, type = 'info') {
+        // 创建消息元素
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${type} alert-dismissible fade show`;
+        alertDiv.setAttribute('role', 'alert');
+        alertDiv.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+
+        // 添加到页面顶部
+        const container = document.querySelector('.container-fluid');
+        container.insertBefore(alertDiv, container.firstChild);
+
+        // 5秒后自动隐藏
+        setTimeout(() => {
+            if (alertDiv.parentNode) {
+                alertDiv.remove();
+            }
+        }, 5000);
+    }
+
+    /**
      * 刷新分析
      */
-    async function refreshAnalysis() {
-        showNotification('正在刷新分析数据...', 'info');
-        await loadAnalysisData();
-        showNotification('分析数据已更新', 'success');
+    function refreshAnalysis() {
+        loadAnalysisData();
     }
 
     /**
      * 导出报告
      */
-    async function exportReport() {
-        try {
-            const response = await fetch('/api/analysis/report');
-            const result = await response.json();
-
-            if (response.ok) {
-                // 创建下载链接
-                const dataStr = JSON.stringify(result, null, 2);
-                const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                const url = URL.createObjectURL(dataBlob);
-
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `bilibili_analysis_report_${new Date().toISOString().split('T')[0]}.json`;
-                link.click();
-
-                URL.revokeObjectURL(url);
-                showNotification('报告导出成功', 'success');
-            } else {
-                throw new Error(result.message || '导出失败');
-            }
-        } catch (error) {
-            console.error('导出报告失败:', error);
-            showNotification('导出报告失败: ' + error.message, 'error');
-        }
+    function exportReport() {
+        showMessage('导出功能正在开发中...', 'info');
     }
 
     /**
@@ -792,6 +817,39 @@
      */
     function applySuggestion(index) {
         showNotification('建议功能开发中...', 'info');
+    }
+
+    /**
+     * 更新用户分类
+     */
+    async function updateCategories() {
+        if (!confirm('确定要更新所有未分类用户的分类吗？这可能需要一些时间。')) {
+            return;
+        }
+
+        try {
+            showMessage('正在更新分类...', 'info');
+
+            const response = await fetch('/api/analysis/update-categories', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                showMessage(`分类更新完成！${result.message}`, 'success');
+                // 刷新分析数据
+                await loadAnalysisData();
+            } else {
+                throw new Error(result.detail || '更新分类失败');
+            }
+        } catch (error) {
+            console.error('更新分类失败:', error);
+            showMessage('更新分类失败: ' + error.message, 'danger');
+        }
     }
 </script>
 {% endblock %}

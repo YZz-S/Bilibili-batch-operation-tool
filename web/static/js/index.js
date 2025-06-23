@@ -59,10 +59,15 @@ function updateStatistics(data) {
         totalElement.textContent = formatNumber(data.total_following || 0);
     }
 
-    // 计算已分类数量
+    // 计算已分类数量：排除"其他"、空分类、null分类
     const categories = data.categories || [];
     const categorizedCount = categories.reduce((sum, cat) => {
-        return sum + (cat.category !== '其他' ? cat.count : 0);
+        const category = cat.category;
+        // 排除"其他"、空字符串、null、undefined等未有效分类的情况
+        if (category && category.trim() !== '' && category !== '其他' && category !== 'null') {
+            return sum + cat.count;
+        }
+        return sum;
     }, 0);
 
     const categorizedElement = document.getElementById('categorized-count');
@@ -70,17 +75,19 @@ function updateStatistics(data) {
         categorizedElement.textContent = formatNumber(categorizedCount);
     }
 
-    // 模拟活跃用户数（实际应该从API获取）
-    const activeElement = document.getElementById('active-count');
-    if (activeElement) {
-        activeElement.textContent = formatNumber(Math.floor(data.total_following * 0.7));
-    }
+    // 计算待处理数（未分类用户）
+    const uncategorizedCount = categories.reduce((sum, cat) => {
+        const category = cat.category;
+        // 包括"其他"、空字符串、null、undefined等未有效分类的情况
+        if (!category || category.trim() === '' || category === '其他' || category === 'null') {
+            return sum + cat.count;
+        }
+        return sum;
+    }, 0);
 
-    // 模拟待处理数（实际应该从API获取）
     const pendingElement = document.getElementById('pending-count');
     if (pendingElement) {
-        const uncategorized = categories.find(cat => cat.category === '其他');
-        pendingElement.textContent = formatNumber(uncategorized ? uncategorized.count : 0);
+        pendingElement.textContent = formatNumber(uncategorizedCount);
     }
 }
 

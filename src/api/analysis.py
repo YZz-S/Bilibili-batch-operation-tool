@@ -25,13 +25,12 @@ async def get_following_distribution(req: Request):
         db_manager = req.app.state.db_manager
         following_list = await db_manager.get_following_list()
         
-        # 为没有分类的用户自动分类并更新数据库
+        # 为没有分类的用户进行内存中的自动分类，但不更新数据库
+        # 避免每次访问analysis页面时都触发大量数据库写操作
         for user in following_list:
             if not user.get("category") or user.get("category").strip() == "":
-                new_category = analyzer.classify_user(user)
-                user["category"] = new_category
-                # 更新数据库中的分类
-                await db_manager.update_user_category(user["uid"], new_category)
+                # 只在内存中设置分类，不写入数据库
+                user["category"] = analyzer.classify_user(user)
         
         distribution = analyzer.analyze_following_distribution(following_list)
         
@@ -324,4 +323,30 @@ async def get_following_trends(req: Request):
         }
     except Exception as e:
         logger.error(f"获取关注趋势失败: {e}")
-        raise HTTPException(status_code=500, detail="获取关注趋势失败") 
+        raise HTTPException(status_code=500, detail="获取关注趋势失败")
+
+
+@router.post("/update-categories")
+async def update_user_categories(req: Request):
+    """手动更新用户分类"""
+    try:
+        db_manager = req.app.state.db_manager
+        following_list = await db_manager.get_following_list()
+        
+        updated_count = 0
+        for user in following_list:
+            if not user.get("category") or user.get("category").strip() == "":
+                new_category = analyzer.classify_user(user)
+                if await db_manager.update_user_category(user["uid"], new_category):
+                    updated_count += 1
+        
+        logger.info(f"手动分类更新完成，共更新 {updated_count} 个用户的分类")
+        
+        return {
+            "updated_count": updated_count,
+            "total_users": len(following_list),
+            "message": f"成功更新 {updated_count} 个用户的分类"
+        }
+    except Exception as e:
+        logger.error(f"手动更新分类失败: {e}")
+        raise HTTPException(status_code=500, detail="更新分类失败") 

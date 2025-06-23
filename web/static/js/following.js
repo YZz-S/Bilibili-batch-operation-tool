@@ -120,8 +120,8 @@ function renderUserList(users) {
                     <div class="user-info">
                         <div class="user-name">
                             ${user.uname}
-                            ${user.vip_type > 0 ? '<span class="vip-badge">VIP</span>' : ''}
-                            ${user.official_type >= 0 ? '<span class="official-badge">认证</span>' : ''}
+                            ${(user.vip_type && user.vip_type > 0) ? '<span class="vip-badge">VIP</span>' : ''}
+                            ${(user.official_type && user.official_type >= 0) ? '<span class="official-badge">认证</span>' : ''}
                         </div>
                         <div class="user-sign">${user.sign || '这个人很懒，什么都没有写～'}</div>
                         <div class="user-stats">

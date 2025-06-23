@@ -20,57 +20,81 @@ class FollowingAnalyzer:
     def __init__(self):
         self.logger = get_logger()
         
-        # 分类关键词映射
+        # 分类关键词映射 - 增强版
         self.category_keywords = {
             "游戏": [
                 "游戏", "攻略", "解说", "实况", "通关", "评测", "LOL", "王者", "原神", 
                 "和平精英", "CF", "CSGO", "DOTA", "守望先锋", "炉石", "我的世界",
-                "游戏解说", "游戏主播", "电竞", "手游", "单机", "网游"
+                "游戏解说", "游戏主播", "电竞", "手游", "单机", "网游", "FPS", "MOBA",
+                "DNF", "魔兽", "暗黑", "塞尔达", "宝可梦", "神奇宝贝", "steam",
+                "主机游戏", "掌机", "switch", "ps", "xbox", "任天堂", "索尼"
             ],
             "科技": [
                 "科技", "数码", "手机", "电脑", "评测", "开箱", "iPhone", "华为", 
                 "小米", "拆机", "硬件", "软件", "编程", "代码", "算法", "AI",
-                "人工智能", "科普", "技术", "IT", "互联网", "极客"
+                "人工智能", "科普", "技术", "IT", "互联网", "极客", "CPU", "GPU",
+                "安卓", "iOS", "Windows", "Mac", "Linux", "芯片", "处理器",
+                "笔记本", "台式机", "显卡", "内存", "SSD", "5G", "6G", "Wi-Fi"
             ],
             "知识": [
                 "知识", "教育", "学习", "课程", "教学", "科普", "历史", "地理",
                 "物理", "化学", "生物", "数学", "英语", "考研", "高考", "大学",
-                "老师", "教授", "讲座", "演讲", "TED", "知识分享"
+                "老师", "教授", "讲座", "演讲", "TED", "知识分享", "学术", "研究",
+                "论文", "博士", "硕士", "本科", "中学", "小学", "语文", "文学"
             ],
             "生活": [
                 "生活", "日常", "vlog", "分享", "记录", "美食", "做饭", "料理",
                 "旅行", "旅游", "探店", "购物", "穿搭", "护肤", "化妆", "家居",
-                "装修", "宠物", "猫", "狗", "健身", "运动", "跑步"
+                "装修", "宠物", "猫", "狗", "健身", "运动", "跑步", "瑜伽",
+                "居家", "日用", "好物", "种草", "拔草", "测评", "推荐"
             ],
             "娱乐": [
                 "娱乐", "搞笑", "段子", "相声", "小品", "脱口秀", "综艺", "明星",
                 "八卦", "影视", "电影", "电视剧", "动漫", "二次元", "cos",
-                "音乐", "歌手", "乐器", "舞蹈", "表演", "魔术"
+                "音乐", "歌手", "乐器", "舞蹈", "表演", "魔术", "街舞", "古风",
+                "说唱", "rap", "翻唱", "原创", "MV", "演唱会", "音乐节"
             ],
             "美食": [
                 "美食", "做饭", "料理", "烹饪", "菜谱", "食谱", "餐厅", "小吃",
                 "甜品", "蛋糕", "烘焙", "火锅", "川菜", "粤菜", "日料", "韩料",
-                "西餐", "中餐", "零食", "饮品", "咖啡", "奶茶"
+                "西餐", "中餐", "零食", "饮品", "咖啡", "奶茶", "探店", "吃播",
+                "厨师", "大厨", "家常菜", "特色菜", "地方菜", "传统菜"
             ],
             "时尚": [
                 "时尚", "穿搭", "服装", "搭配", "化妆", "护肤", "美妆", "口红",
                 "包包", "鞋子", "配饰", "发型", "美甲", "减肥", "瘦身", "健身",
-                "模特", "时装", "品牌", "奢侈品"
+                "模特", "时装", "品牌", "奢侈品", "潮流", "流行", "趋势",
+                "造型", "搭配师", "美容", "保养", "彩妆", "香水"
             ],
             "汽车": [
                 "汽车", "车", "试驾", "评测", "改装", "豪车", "跑车", "SUV",
                 "新能源", "电动车", "特斯拉", "比亚迪", "奔驰", "宝马", "奥迪",
-                "保养", "维修", "驾驶", "驾考", "车展"
+                "保养", "维修", "驾驶", "驾考", "车展", "赛车", "摩托车",
+                "二手车", "购车", "选车", "4S店", "汽配", "轮胎", "机油"
             ],
             "财经": [
                 "财经", "股票", "基金", "投资", "理财", "经济", "金融", "创业",
                 "商业", "企业", "管理", "营销", "电商", "直播带货", "副业",
-                "赚钱", "省钱", "消费", "保险", "房产"
+                "赚钱", "省钱", "消费", "保险", "房产", "炒股", "期货", "外汇",
+                "银行", "贷款", "信用卡", "支付", "数字货币", "比特币"
             ],
             "体育": [
                 "体育", "足球", "篮球", "网球", "羽毛球", "乒乓球", "游泳",
                 "健身", "跑步", "马拉松", "瑜伽", "NBA", "CBA", "世界杯",
-                "奥运会", "运动员", "比赛", "竞技", "训练"
+                "奥运会", "运动员", "比赛", "竞技", "训练", "中超", "英超",
+                "欧冠", "奥运", "亚运", "全运", "体操", "田径", "举重"
+            ],
+            "动漫": [
+                "动漫", "番剧", "漫画", "二次元", "ACG", "动画", "声优",
+                "手办", "模型", "cos", "cosplay", "宅", "萌", "治愈",
+                "热血", "恋爱", "校园", "异世界", "穿越", "魔法", "忍者",
+                "海贼", "火影", "死神", "龙珠", "柯南", "进击", "鬼灭"
+            ],
+            "音乐": [
+                "音乐", "唱歌", "翻唱", "原创", "作词", "作曲", "编曲", "乐器",
+                "钢琴", "吉他", "小提琴", "古筝", "二胡", "民谣", "摇滚",
+                "流行", "古典", "电子", "说唱", "rap", "嘻哈", "爵士",
+                "蓝调", "country", "金属", "朋克", "indie", "lo-fi"
             ]
         }
     
@@ -79,25 +103,67 @@ class FollowingAnalyzer:
         uname = user_data.get("uname", "").lower()
         sign = user_data.get("sign", "").lower()
         
-        # 组合用户名和签名进行分析
-        text = f"{uname} {sign}"
+        # 组合用户名和签名进行分析，给用户名更高权重
+        uname_weight = 3.0  # 用户名权重更高
+        sign_weight = 1.0   # 签名权重
         
         # 计算每个分类的匹配分数
         category_scores = {}
         for category, keywords in self.category_keywords.items():
-            score = 0
+            score = 0.0
+            
+            # 检查用户名匹配
             for keyword in keywords:
-                if keyword.lower() in text:
-                    score += 1
+                keyword_lower = keyword.lower()
+                # 完全匹配得分更高
+                if keyword_lower == uname.strip():
+                    score += 5.0 * uname_weight
+                elif keyword_lower in uname:
+                    score += 2.0 * uname_weight
+                
+                # 检查签名匹配
+                if keyword_lower == sign.strip():
+                    score += 3.0 * sign_weight
+                elif keyword_lower in sign:
+                    score += 1.0 * sign_weight
+            
             category_scores[category] = score
         
         # 找到最高分的分类
         if category_scores:
             best_category = max(category_scores, key=category_scores.get)
-            if category_scores[best_category] > 0:
+            best_score = category_scores[best_category]
+            
+            # 设置最低分数阈值，避免误分类
+            min_score_threshold = 1.0
+            if best_score >= min_score_threshold:
+                # 检查是否有明显的最佳分类（与第二名差距足够大）
+                sorted_scores = sorted(category_scores.values(), reverse=True)
+                if len(sorted_scores) >= 2:
+                    first_score = sorted_scores[0]
+                    second_score = sorted_scores[1]
+                    # 如果最高分与第二高分差距不够大，说明分类不够明确
+                    if first_score - second_score < 0.5:
+                        return "其他"
+                
                 return best_category
         
-        # 如果没有匹配到，返回默认分类
+        # 如果没有匹配到明确分类，尝试一些特殊规则
+        combined_text = f"{uname} {sign}"
+        
+        # UP主类型检测
+        if any(keyword in combined_text for keyword in ['up主', 'up', 'youtuber', '主播', '博主']):
+            # 根据其他关键词进一步细分
+            if any(keyword in combined_text for keyword in ['游戏', '电竞', '直播']):
+                return "游戏"
+            elif any(keyword in combined_text for keyword in ['科技', '数码', '测评']):
+                return "科技"
+            elif any(keyword in combined_text for keyword in ['美食', '料理', '做饭']):
+                return "美食"
+            elif any(keyword in combined_text for keyword in ['生活', 'vlog', '日常']):
+                return "生活"
+        
+        # 如果都没有匹配到，返回其他
         return "其他"
     
     def analyze_following_distribution(self, following_list: List[Dict[str, Any]]) -> Dict[str, Any]:
@@ -140,6 +206,12 @@ class FollowingAnalyzer:
         vip_stats = Counter()
         for user in following_list:
             vip_type = user.get("vip_type", 0)
+            # 确保vip_type是数字类型
+            try:
+                vip_type = int(vip_type) if vip_type is not None else 0
+            except (ValueError, TypeError):
+                vip_type = 0
+                
             if vip_type == 0:
                 vip_stats["普通用户"] += 1
             elif vip_type == 1:
@@ -147,12 +219,18 @@ class FollowingAnalyzer:
             elif vip_type == 2:
                 vip_stats["年度大会员"] += 1
             else:
-                vip_stats["普通用户"] += 1
+                vip_stats["其他VIP"] += 1
         
         # 认证用户统计 - 修复字段访问
         official_stats = Counter()
         for user in following_list:
             official_type = user.get("official_type", -1)
+            # 确保official_type是数字类型
+            try:
+                official_type = int(official_type) if official_type is not None else -1
+            except (ValueError, TypeError):
+                official_type = -1
+                
             if official_type == -1:
                 official_stats["未认证"] += 1
             elif official_type == 0:
@@ -160,7 +238,7 @@ class FollowingAnalyzer:
             elif official_type == 1:
                 official_stats["机构认证"] += 1
             else:
-                official_stats["未认证"] += 1
+                official_stats["其他认证"] += 1
         
         return {
             "total_count": len(following_list),

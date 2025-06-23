@@ -234,20 +234,24 @@ async def get_statistics(req: Request):
             if category and category.strip() != "" and category != "其他" and category != "null":
                 categorized_count += 1
             
-            # VIP用户：vip_type > 0
-            vip_info = user.get("vip", {})
-            vip_type = vip_info.get("vipType", 0) if isinstance(vip_info, dict) else user.get("vip_type", 0)
-            if vip_type and vip_type > 0:
+            # VIP用户：使用正确的字段检查
+            vip_type = user.get("vip_type", 0)
+            try:
+                vip_type = int(vip_type) if vip_type is not None else 0
+            except (ValueError, TypeError):
+                vip_type = 0
+            
+            if vip_type > 0:
                 vip_count += 1
             
-            # 认证用户：official_verify.type >= 0 或 official_type > 0
-            official_verify = user.get("official_verify", {})
-            if isinstance(official_verify, dict):
-                official_type = official_verify.get("type", -1)
-            else:
-                official_type = user.get("official_type", -1)
-            
-            if official_type and official_type >= 0:
+            # 认证用户：使用正确的字段检查  
+            official_type = user.get("official_type", -1)
+            try:
+                official_type = int(official_type) if official_type is not None else -1
+            except (ValueError, TypeError):
+                official_type = -1
+                
+            if official_type >= 0:
                 official_count += 1
         
         return {
