@@ -103,6 +103,55 @@
         margin-bottom: 20px;
         display: none;
     }
+
+    .stats-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+
+    .stats-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+
+    .stats-card .card-title {
+        font-size: 2rem;
+        font-weight: bold;
+        margin-bottom: 0.5rem;
+        transition: all 0.3s ease;
+    }
+
+    .stats-updating {
+        opacity: 0.6;
+        transform: scale(0.95);
+    }
+
+    .refresh-btn {
+        transition: all 0.3s ease;
+    }
+
+    .refresh-btn:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 8px rgba(40, 167, 69, 0.3);
+    }
+
+    .refresh-btn .fa-sync-alt {
+        transition: transform 0.5s ease;
+    }
+
+    .refresh-btn.loading .fa-sync-alt {
+        animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+        from {
+            transform: rotate(0deg);
+        }
+
+        to {
+            transform: rotate(360deg);
+        }
+    }
 </style>
 {% endblock %}
 
@@ -130,7 +179,7 @@
 
     <!-- 搜索和筛选 -->
     <div class="row mb-4">
-        <div class="col-md-4">
+        <div class="col-md-3">
             <div class="input-group">
                 <input type="text" class="form-control" id="searchInput" placeholder="搜索用户名或签名...">
                 <button class="btn btn-primary" onclick="searchUsers()">
@@ -159,9 +208,9 @@
                 <option value="asc">升序</option>
             </select>
         </div>
-        <div class="col-md-1">
-            <button class="btn btn-outline-secondary" onclick="loadFollowingList()" title="刷新">
-                <i class="fas fa-sync-alt"></i>
+        <div class="col-md-2">
+            <button class="btn btn-success w-100 refresh-btn" id="refreshBtn" onclick="refreshData()" title="刷新数据">
+                <i class="fas fa-sync-alt me-1"></i> 刷新数据
             </button>
         </div>
     </div>
@@ -205,35 +254,43 @@
     </div>
 
     <!-- 统计信息 -->
-    <div class="row mb-4">
+    <div class="row mb-4" id="statisticsCards">
         <div class="col-md-3">
-            <div class="card text-center">
+            <div class="card text-center stats-card">
                 <div class="card-body">
-                    <h5 class="card-title text-primary" id="totalCount">0</h5>
+                    <h5 class="card-title text-primary" id="totalCount">
+                        <i class="fas fa-users me-2"></i>0
+                    </h5>
                     <p class="card-text">总关注数</p>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center">
+            <div class="card text-center stats-card">
                 <div class="card-body">
-                    <h5 class="card-title text-success" id="categorizedCount">0</h5>
+                    <h5 class="card-title text-success" id="categorizedCount">
+                        <i class="fas fa-tags me-2"></i>0
+                    </h5>
                     <p class="card-text">已分类</p>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center">
+            <div class="card text-center stats-card">
                 <div class="card-body">
-                    <h5 class="card-title text-warning" id="vipCount">0</h5>
+                    <h5 class="card-title text-warning" id="vipCount">
+                        <i class="fas fa-crown me-2"></i>0
+                    </h5>
                     <p class="card-text">VIP用户</p>
                 </div>
             </div>
         </div>
         <div class="col-md-3">
-            <div class="card text-center">
+            <div class="card text-center stats-card">
                 <div class="card-body">
-                    <h5 class="card-title text-info" id="officialCount">0</h5>
+                    <h5 class="card-title text-info" id="officialCount">
+                        <i class="fas fa-certificate me-2"></i>0
+                    </h5>
                     <p class="card-text">认证用户</p>
                 </div>
             </div>

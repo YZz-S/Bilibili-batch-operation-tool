@@ -176,6 +176,53 @@ async def get_categories(req: Request):
         raise HTTPException(status_code=500, detail="获取分类统计失败")
 
 
+@router.get("/statistics")
+async def get_statistics(req: Request):
+    """获取详细统计数据"""
+    try:
+        db_manager = req.app.state.db_manager
+        following_list = await db_manager.get_following_list()
+        
+        total_count = 0
+        categorized_count = 0
+        vip_count = 0
+        official_count = 0
+        
+        for user in following_list:
+            total_count += 1
+            
+            # 已分类用户：有category且不为空、不为null、不为"其他"
+            category = user.get("category", "")
+            if category and category.strip() != "" and category != "其他" and category != "null":
+                categorized_count += 1
+            
+            # VIP用户：vip_type > 0
+            vip_info = user.get("vip", {})
+            vip_type = vip_info.get("vipType", 0) if isinstance(vip_info, dict) else user.get("vip_type", 0)
+            if vip_type and vip_type > 0:
+                vip_count += 1
+            
+            # 认证用户：official_verify.type >= 0 或 official_type > 0
+            official_verify = user.get("official_verify", {})
+            if isinstance(official_verify, dict):
+                official_type = official_verify.get("type", -1)
+            else:
+                official_type = user.get("official_type", -1)
+            
+            if official_type and official_type >= 0:
+                official_count += 1
+        
+        return {
+            "total_count": total_count,
+            "categorized_count": categorized_count,
+            "vip_count": vip_count,
+            "official_count": official_count
+        }
+    except Exception as e:
+        logger.error(f"获取统计数据失败: {e}")
+        raise HTTPException(status_code=500, detail="获取统计数据失败")
+
+
 @router.post("/unfollow")
 async def batch_unfollow(request: UnfollowRequest, req: Request):
     """批量取消关注"""

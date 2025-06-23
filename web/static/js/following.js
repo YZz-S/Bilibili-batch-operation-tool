@@ -38,7 +38,7 @@ async function loadFollowingList(silent = false) {
             allUsers = result.data || [];
             renderUserList(allUsers);
             renderPagination(result.pagination);
-            updateStatistics();
+            await updateStatistics();
             updateSortUI();
 
             if (!silent) {
@@ -247,7 +247,37 @@ function renderCategoryOptions() {
 /**
  * 更新统计信息
  */
-function updateStatistics() {
+async function updateStatistics() {
+    // 添加更新动画
+    const statsCards = document.getElementById('statisticsCards');
+    if (statsCards) {
+        statsCards.classList.add('stats-updating');
+    }
+
+    try {
+        // 从API获取准确的统计数据
+        const response = await fetch('/api/bilibili/statistics');
+        if (response.ok) {
+            const stats = await response.json();
+
+            animateCountUpdate('totalCount', stats.total_count || 0);
+            animateCountUpdate('categorizedCount', stats.categorized_count || 0);
+            animateCountUpdate('vipCount', stats.vip_count || 0);
+            animateCountUpdate('officialCount', stats.official_count || 0);
+
+            // 移除更新动画
+            setTimeout(() => {
+                if (statsCards) {
+                    statsCards.classList.remove('stats-updating');
+                }
+            }, 300);
+            return;
+        }
+    } catch (error) {
+        console.warn('获取统计数据失败，使用本地计算:', error);
+    }
+
+    // 如果API失败，则使用本地数据计算
     let totalCount = 0;
     let categorizedCount = 0;
     let vipCount = 0;
@@ -255,21 +285,93 @@ function updateStatistics() {
 
     allUsers.forEach(user => {
         totalCount++;
-        if (user.category && user.category !== '其他') {
+
+        // 已分类用户：有category且不为空、不为null、不为"其他"
+        if (user.category && user.category.trim() !== '' && user.category !== '其他' && user.category !== 'null') {
             categorizedCount++;
         }
-        if (user.vip_type > 0) {
+
+        // VIP用户：vip_type > 0
+        if (user.vip_type && user.vip_type > 0) {
             vipCount++;
         }
-        if (user.official_type >= 0) {
+
+        // 认证用户：official_type > 0 (0表示未认证，1表示个人认证，2表示机构认证)
+        if (user.official_type && user.official_type > 0) {
             officialCount++;
         }
     });
 
-    document.getElementById('totalCount').textContent = totalCount;
-    document.getElementById('categorizedCount').textContent = categorizedCount;
-    document.getElementById('vipCount').textContent = vipCount;
-    document.getElementById('officialCount').textContent = officialCount;
+    animateCountUpdate('totalCount', totalCount);
+    animateCountUpdate('categorizedCount', categorizedCount);
+    animateCountUpdate('vipCount', vipCount);
+    animateCountUpdate('officialCount', officialCount);
+
+    // 移除更新动画
+    setTimeout(() => {
+        if (statsCards) {
+            statsCards.classList.remove('stats-updating');
+        }
+    }, 300);
+}
+
+/**
+ * 数字动画更新
+ */
+function animateCountUpdate(elementId, newValue) {
+    const element = document.getElementById(elementId);
+    if (!element) return;
+
+    const icon = element.querySelector('i');
+    const iconHtml = icon ? icon.outerHTML + ' ' : '';
+    const currentValue = parseInt(element.textContent.replace(/\D/g, '')) || 0;
+
+    if (currentValue === newValue) return;
+
+    const increment = newValue > currentValue ? 1 : -1;
+    const stepTime = Math.abs(Math.floor(300 / Math.abs(newValue - currentValue)));
+
+    let current = currentValue;
+    const timer = setInterval(() => {
+        current += increment;
+        element.innerHTML = iconHtml + current;
+
+        if (current === newValue) {
+            clearInterval(timer);
+        }
+    }, Math.max(stepTime, 10));
+}
+
+/**
+ * 刷新数据
+ */
+async function refreshData() {
+    const refreshBtn = document.getElementById('refreshBtn');
+
+    // 添加加载状态
+    if (refreshBtn) {
+        refreshBtn.classList.add('loading');
+        refreshBtn.disabled = true;
+    }
+
+    try {
+        showMessage('正在刷新数据...', 'info', 1000);
+
+        // 刷新关注列表和分类
+        await loadFollowingList(true);
+        await loadCategories();
+
+        showMessage('数据刷新成功！', 'success');
+    } catch (error) {
+        console.error('刷新数据失败:', error);
+        showMessage('刷新数据失败: ' + error.message, 'danger');
+    } finally {
+        // 移除加载状态
+        if (refreshBtn) {
+            refreshBtn.classList.remove('loading');
+            refreshBtn.disabled = false;
+        }
+    }
 }
 
 /**
