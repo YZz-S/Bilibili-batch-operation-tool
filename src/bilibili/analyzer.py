@@ -103,16 +103,30 @@ class FollowingAnalyzer:
     def analyze_following_distribution(self, following_list: List[Dict[str, Any]]) -> Dict[str, Any]:
         """分析关注列表分布"""
         if not following_list:
-            return {}
+            return {
+                "total_count": 0,
+                "category_distribution": {},
+                "monthly_following": {},
+                "vip_distribution": {"普通用户": 0},
+                "official_distribution": {"未认证": 0},
+                "analysis_time": datetime.now().isoformat()
+            }
         
-        # 分类统计
-        categories = [self.classify_user(user) for user in following_list]
+        # 分类统计 - 确保每个用户都有分类
+        categories = []
+        for user in following_list:
+            category = user.get("category")
+            if not category or category.strip() == "":
+                # 如果没有分类，进行智能分类
+                category = self.classify_user(user)
+            categories.append(category)
+        
         category_stats = Counter(categories)
         
         # 关注时间分析
         follow_times = []
         for user in following_list:
-            mtime = user.get("mtime", 0)
+            mtime = user.get("mtime", 0) or user.get("follow_time", 0)
             if mtime > 0:
                 follow_times.append(datetime.fromtimestamp(mtime))
         
@@ -122,27 +136,31 @@ class FollowingAnalyzer:
             month_key = dt.strftime("%Y-%m")
             monthly_stats[month_key] += 1
         
-        # VIP用户统计
+        # VIP用户统计 - 修复字段访问
         vip_stats = Counter()
         for user in following_list:
-            vip_type = user.get("vip", {}).get("vipType", 0)  # B站API使用vipType
+            vip_type = user.get("vip_type", 0)
             if vip_type == 0:
                 vip_stats["普通用户"] += 1
             elif vip_type == 1:
                 vip_stats["月度大会员"] += 1
             elif vip_type == 2:
                 vip_stats["年度大会员"] += 1
+            else:
+                vip_stats["普通用户"] += 1
         
-        # 认证用户统计
+        # 认证用户统计 - 修复字段访问
         official_stats = Counter()
         for user in following_list:
-            official_type = user.get("official_verify", {}).get("type", -1)  # B站API使用official_verify
+            official_type = user.get("official_type", -1)
             if official_type == -1:
                 official_stats["未认证"] += 1
             elif official_type == 0:
                 official_stats["个人认证"] += 1
             elif official_type == 1:
                 official_stats["机构认证"] += 1
+            else:
+                official_stats["未认证"] += 1
         
         return {
             "total_count": len(following_list),
@@ -178,6 +196,10 @@ class FollowingAnalyzer:
                 if days_since_last_video > 90:
                     is_inactive = True
                     inactive_reasons.append(f"{days_since_last_video}天未发视频")
+            else:
+                # 没有视频时间记录，考虑为不活跃
+                is_inactive = True
+                inactive_reasons.append("无视频活动记录")
             
             # 活跃度分数低于0.3
             activity_score = stat.get("activity_score", 0)
@@ -197,9 +219,25 @@ class FollowingAnalyzer:
                 user_copy["last_video_days"] = (current_time - datetime.fromtimestamp(last_video_time)).days if last_video_time > 0 else -1
                 inactive_users.append(user_copy)
         
-        # 按不活跃程度排序
-        inactive_users.sort(key=lambda x: x.get("last_video_days", 9999), reverse=True)
+        # 按不活跃程度排序 - 综合考虑多个因素
+        def inactive_score(user):
+            score = 0
+            if user["last_video_days"] > 0:
+                score += user["last_video_days"] / 30  # 按月计算
+            else:
+                score += 12  # 无记录给高分
+            
+            stat = stats_dict.get(user.get("uid"), {})
+            activity_score = stat.get("activity_score", 0)
+            score += (1 - activity_score) * 10  # 活跃度越低分数越高
+            
+            video_count = stat.get("video_count", 0)
+            if video_count < 5:
+                score += (5 - video_count) * 2
+            
+            return score
         
+        inactive_users.sort(key=inactive_score, reverse=True)
         return inactive_users
     
     def suggest_cleanup(self, following_list: List[Dict[str, Any]], 

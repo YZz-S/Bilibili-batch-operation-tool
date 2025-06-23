@@ -378,7 +378,7 @@
 
             // 更新图表
             updateCategoryChart(distributionData.distribution);
-            updateTrendChart(trendsData.trends);
+            updateTrendChart(trendsData);
 
             // 更新洞察
             updateInsights(distributionData, trendsData, inactiveData);
@@ -415,15 +415,26 @@
     /**
      * 更新分类分布图表
      */
-    function updateCategoryChart(distribution) {
+    function updateCategoryChart(distributionData) {
         const ctx = document.getElementById('categoryChart').getContext('2d');
 
         if (categoryChart) {
             categoryChart.destroy();
         }
 
-        const categories = Object.keys(distribution || {});
-        const counts = Object.values(distribution || {});
+        // 处理分布数据格式
+        let categories = [];
+        let counts = [];
+
+        if (distributionData && distributionData.category_distribution) {
+            categories = Object.keys(distributionData.category_distribution);
+            counts = Object.values(distributionData.category_distribution);
+        } else {
+            // 兼容旧格式
+            categories = Object.keys(distributionData || {});
+            counts = Object.values(distributionData || {});
+        }
+
         const dark = isDarkMode();
 
         categoryChart = new Chart(ctx, {
@@ -473,15 +484,33 @@
     /**
      * 更新趋势图表
      */
-    function updateTrendChart(trends) {
+    function updateTrendChart(trendsData) {
         const ctx = document.getElementById('trendChart').getContext('2d');
 
         if (trendChart) {
             trendChart.destroy();
         }
 
-        const months = Object.keys(trends || {});
-        const counts = Object.values(trends || {});
+        // 处理趋势数据格式
+        let months = [];
+        let counts = [];
+
+        if (trendsData && trendsData.chart_data) {
+            // 使用新的chart_data格式
+            months = Object.keys(trendsData.chart_data);
+            counts = Object.values(trendsData.chart_data);
+        } else if (trendsData && Array.isArray(trendsData.trends)) {
+            // 使用trends数组格式
+            trendsData.trends.forEach(item => {
+                months.push(item.month);
+                counts.push(item.count);
+            });
+        } else {
+            // 兼容旧格式
+            months = Object.keys(trendsData || {});
+            counts = Object.values(trendsData || {});
+        }
+
         const dark = isDarkMode();
 
         trendChart = new Chart(ctx, {
@@ -544,8 +573,11 @@
         const insightsContainer = document.getElementById('insights');
         let insights = [];
 
+        // 获取分布数据
+        const categoryDistribution = distribution.distribution?.category_distribution || distribution.distribution || {};
+
         // 生成洞察
-        const totalUsers = Object.values(distribution.distribution || {}).reduce((a, b) => a + b, 0);
+        const totalUsers = Object.values(categoryDistribution).reduce((a, b) => a + b, 0);
         const inactiveCount = inactive.total_count || 0;
 
         if (inactiveCount > totalUsers * 0.3) {
@@ -556,17 +588,39 @@
             });
         }
 
-        const categories = Object.keys(distribution.distribution || {});
-        const maxCategory = categories.reduce((a, b) =>
-            (distribution.distribution[a] || 0) > (distribution.distribution[b] || 0) ? a : b
-        );
+        const categories = Object.keys(categoryDistribution);
+        if (categories.length > 0) {
+            const maxCategory = categories.reduce((a, b) =>
+                (categoryDistribution[a] || 0) > (categoryDistribution[b] || 0) ? a : b
+            );
 
-        if (maxCategory) {
-            insights.push({
-                icon: 'star',
-                text: `您最关注的类型是"${maxCategory}"，共有 ${distribution.distribution[maxCategory]} 个用户。`,
-                type: 'info'
-            });
+            if (maxCategory && categoryDistribution[maxCategory] > 0) {
+                insights.push({
+                    icon: 'star',
+                    text: `您最关注的类型是"${maxCategory}"，共有 ${categoryDistribution[maxCategory]} 个用户。`,
+                    type: 'info'
+                });
+            }
+        }
+
+        // 趋势洞察
+        if (trends && trends.trends && trends.trends.length > 0) {
+            const recentTrends = trends.trends.slice(-3); // 最近3个月
+            const avgGrowth = recentTrends.reduce((sum, item) => sum + (item.growth_rate || 0), 0) / recentTrends.length;
+
+            if (avgGrowth > 10) {
+                insights.push({
+                    icon: 'trending-up',
+                    text: `最近关注增长很快，平均月增长率 ${avgGrowth.toFixed(1)}%，您对新内容很感兴趣！`,
+                    type: 'success'
+                });
+            } else if (avgGrowth < -5) {
+                insights.push({
+                    icon: 'trending-down',
+                    text: `最近关注增长放缓，可能需要发现更多有趣的内容。`,
+                    type: 'info'
+                });
+            }
         }
 
         // 渲染洞察
