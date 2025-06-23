@@ -326,15 +326,31 @@ body {
     .card {
         background-color: #2d3748;
         color: #e9ecef;
+        border: 1px solid #4a5568;
+    }
+
+    .card-header {
+        background-color: #4a5568;
+        border-bottom-color: #2d3748;
+        color: #e9ecef;
     }
 
     .table {
         color: #e9ecef;
+        --bs-table-bg: #2d3748;
+        --bs-table-striped-bg: #4a5568;
+        --bs-table-hover-bg: #4a5568;
+        --bs-table-border-color: #4a5568;
     }
 
     .table thead th {
         background-color: #4a5568;
         color: #e9ecef;
+        border-color: #4a5568;
+    }
+
+    .table td {
+        border-color: #4a5568;
     }
 
     .form-control {
@@ -347,6 +363,148 @@ body {
         background-color: #2d3748;
         border-color: #007bff;
         color: #e9ecef;
+        box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    }
+
+    .form-control::placeholder {
+        color: #a0aec0;
+    }
+
+    /* 页脚深色模式 */
+    footer.bg-light {
+        background-color: #2d3748 !important;
+        border-top: 1px solid #4a5568;
+    }
+
+    footer .text-muted {
+        color: #a0aec0 !important;
+    }
+
+    /* 导航栏深色模式 */
+    .navbar-dark.bg-primary {
+        background-color: #2d3748 !important;
+        border-bottom: 1px solid #4a5568;
+    }
+
+    /* 徽章深色模式 */
+    .badge.bg-secondary {
+        background-color: #4a5568 !important;
+    }
+
+    /* 按钮深色模式 */
+    .btn-outline-primary {
+        border-color: #63b3ed;
+        color: #63b3ed;
+    }
+
+    .btn-outline-primary:hover {
+        background-color: #63b3ed;
+        border-color: #63b3ed;
+        color: #1a202c;
+    }
+
+    .btn-outline-secondary {
+        border-color: #a0aec0;
+        color: #a0aec0;
+    }
+
+    .btn-outline-secondary:hover {
+        background-color: #a0aec0;
+        border-color: #a0aec0;
+        color: #1a202c;
+    }
+
+    /* 过滤器部分 */
+    .filter-section {
+        background-color: #2d3748;
+        border: 1px solid #4a5568;
+    }
+
+    /* 分页 */
+    .page-link {
+        background-color: #2d3748;
+        border-color: #4a5568;
+        color: #e9ecef;
+    }
+
+    .page-link:hover {
+        background-color: #4a5568;
+        border-color: #4a5568;
+        color: #e9ecef;
+    }
+
+    .page-item.active .page-link {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: #fff;
+    }
+
+    /* 列表组 */
+    .list-group-item {
+        background-color: #2d3748;
+        border-color: #4a5568;
+        color: #e9ecef;
+    }
+
+    .list-group-item:hover {
+        background-color: #4a5568;
+    }
+
+    /* 模态框 */
+    .modal-content {
+        background-color: #2d3748;
+        border: 1px solid #4a5568;
+        color: #e9ecef;
+    }
+
+    .modal-header {
+        background-color: #4a5568;
+        border-bottom-color: #2d3748;
+    }
+
+    /* 提示框 */
+    .alert-success {
+        background-color: #22543d;
+        border-left-color: #68d391;
+        color: #c6f6d5;
+    }
+
+    .alert-warning {
+        background-color: #744210;
+        border-left-color: #f6e05e;
+        color: #faf089;
+    }
+
+    .alert-danger {
+        background-color: #742a2a;
+        border-left-color: #fc8181;
+        color: #fed7d7;
+    }
+
+    .alert-info {
+        background-color: #2a4365;
+        border-left-color: #63b3ed;
+        color: #bee3f8;
+    }
+
+    /* 加载动画 */
+    .loading-overlay {
+        background-color: rgba(26, 26, 26, 0.8);
+        color: #e9ecef;
+    }
+
+    /* 文本颜色 */
+    .text-muted {
+        color: #a0aec0 !important;
+    }
+
+    /* 链接颜色 */
+    a {
+        color: #63b3ed;
+    }
+
+    a:hover {
+        color: #90cdf4;
     }
 }
 

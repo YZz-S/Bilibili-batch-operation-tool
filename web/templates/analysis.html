@@ -91,6 +91,123 @@
         display: flex;
         gap: 5px;
     }
+
+    /* 深色模式支持 */
+    @media (prefers-color-scheme: dark) {
+        .analysis-card {
+            background: #2d3748;
+            color: #e9ecef;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .stat-box {
+            color: white;
+            /* 保持白色文字，因为背景是深色渐变 */
+        }
+
+        .insight-item {
+            background: #4a5568;
+            color: #e9ecef;
+            border-left-color: #63b3ed;
+        }
+
+        .insight-icon {
+            color: #63b3ed;
+        }
+
+        .inactive-user {
+            background: #4a5568;
+            color: #e9ecef;
+            border-color: #2d3748;
+        }
+
+        .inactive-name {
+            color: #e9ecef;
+        }
+
+        .inactive-reason {
+            color: #a0aec0;
+        }
+
+        /* 图表背景适配 */
+        .chart-container {
+            background: transparent;
+        }
+
+        /* 加载动画背景适配 */
+        .loading-overlay {
+            background-color: rgba(45, 55, 72, 0.8);
+            color: #e9ecef;
+        }
+
+        /* 卡片标题颜色 */
+        .analysis-card h5 {
+            color: #e9ecef;
+        }
+
+        /* 按钮在深色模式下的样式调整 */
+        .btn-outline-danger {
+            border-color: #fc8181;
+            color: #fc8181;
+        }
+
+        .btn-outline-danger:hover {
+            background-color: #fc8181;
+            border-color: #fc8181;
+            color: #1a202c;
+        }
+
+        .btn-outline-primary {
+            border-color: #63b3ed;
+            color: #63b3ed;
+        }
+
+        .btn-outline-primary:hover {
+            background-color: #63b3ed;
+            border-color: #63b3ed;
+            color: #1a202c;
+        }
+
+        /* 清理建议卡片 */
+        .card {
+            background-color: #4a5568;
+            border: 1px solid #2d3748;
+        }
+
+        .card-body {
+            color: #e9ecef;
+        }
+
+        .card-title {
+            color: #e9ecef;
+        }
+
+        .card-text {
+            color: #cbd5e0;
+        }
+
+        .text-muted {
+            color: #a0aec0 !important;
+        }
+
+        /* Spinner 在深色模式下的颜色调整 */
+        .spinner-border {
+            border-color: #4a5568;
+            border-top-color: #63b3ed;
+        }
+
+        .spinner-border.text-primary {
+            border-top-color: #63b3ed;
+        }
+
+        .spinner-border.text-warning {
+            border-top-color: #f6e05e;
+        }
+
+        .spinner-border.text-success {
+            border-top-color: #68d391;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -223,6 +340,17 @@
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', function () {
         loadAnalysisData();
+
+        // 监听深色模式变化
+        if (window.matchMedia) {
+            const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+            mediaQuery.addEventListener('change', function (e) {
+                // 重新加载图表以应用新的颜色主题
+                setTimeout(() => {
+                    loadAnalysisData();
+                }, 100);
+            });
+        }
     });
 
     /**
@@ -278,6 +406,13 @@
     }
 
     /**
+     * 检测是否为深色模式
+     */
+    function isDarkMode() {
+        return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+
+    /**
      * 更新分类分布图表
      */
     function updateCategoryChart(distribution) {
@@ -289,6 +424,7 @@
 
         const categories = Object.keys(distribution || {});
         const counts = Object.values(distribution || {});
+        const dark = isDarkMode();
 
         categoryChart = new Chart(ctx, {
             type: 'doughnut',
@@ -302,7 +438,7 @@
                         '#4BC0C0', '#FF6384'
                     ],
                     borderWidth: 2,
-                    borderColor: '#fff'
+                    borderColor: dark ? '#2d3748' : '#fff'
                 }]
             },
             options: {
@@ -310,9 +446,17 @@
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        position: 'bottom'
+                        position: 'bottom',
+                        labels: {
+                            color: dark ? '#e9ecef' : '#666'
+                        }
                     },
                     tooltip: {
+                        backgroundColor: dark ? '#4a5568' : 'rgba(0,0,0,0.8)',
+                        titleColor: dark ? '#e9ecef' : '#fff',
+                        bodyColor: dark ? '#e9ecef' : '#fff',
+                        borderColor: dark ? '#2d3748' : 'rgba(0,0,0,0.1)',
+                        borderWidth: 1,
                         callbacks: {
                             label: function (context) {
                                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
@@ -338,6 +482,7 @@
 
         const months = Object.keys(trends || {});
         const counts = Object.values(trends || {});
+        const dark = isDarkMode();
 
         trendChart = new Chart(ctx, {
             type: 'line',
@@ -359,13 +504,32 @@
                 plugins: {
                     legend: {
                         display: false
+                    },
+                    tooltip: {
+                        backgroundColor: dark ? '#4a5568' : 'rgba(0,0,0,0.8)',
+                        titleColor: dark ? '#e9ecef' : '#fff',
+                        bodyColor: dark ? '#e9ecef' : '#fff',
+                        borderColor: dark ? '#2d3748' : 'rgba(0,0,0,0.1)',
+                        borderWidth: 1
                     }
                 },
                 scales: {
+                    x: {
+                        ticks: {
+                            color: dark ? '#e9ecef' : '#666'
+                        },
+                        grid: {
+                            color: dark ? '#4a5568' : 'rgba(0,0,0,0.1)'
+                        }
+                    },
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            stepSize: 1
+                            stepSize: 1,
+                            color: dark ? '#e9ecef' : '#666'
+                        },
+                        grid: {
+                            color: dark ? '#4a5568' : 'rgba(0,0,0,0.1)'
                         }
                     }
                 }
