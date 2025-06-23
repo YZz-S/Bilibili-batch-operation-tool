@@ -236,9 +236,18 @@
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
             <h6 class="mb-0"><i class="fas fa-chart-bar me-2"></i>统计概览</h6>
-            <small class="text-muted" id="statsTypeIndicator">
-                <i class="fas fa-robot me-1"></i>系统分类数据
-            </small>
+            <div class="d-flex align-items-center gap-3">
+                <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" id="ignoreUngroupedSwitch"
+                        onchange="handleIgnoreUngroupedChange()">
+                    <label class="form-check-label" for="ignoreUngroupedSwitch">
+                        <small>忽略未分组</small>
+                    </label>
+                </div>
+                <small class="text-muted" id="statsTypeIndicator">
+                    <i class="fas fa-robot me-1"></i>系统分类数据
+                </small>
+            </div>
         </div>
         <div class="card-body">
             <div class="row">
@@ -313,6 +322,10 @@
         <div class="col-lg-6">
             <div class="analysis-card">
                 <h5><i class="fas fa-lightbulb"></i> 智能洞察</h5>
+                <div class="alert alert-info" style="display: none;" id="insights-ignore-notice">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>提示：</strong>当前分析已启用"忽略未分组"，仅分析已分类的用户数据，提供更精准的洞察结果。
+                </div>
                 <div id="insights">
                     <div class="text-center py-3">
                         <div class="spinner-border text-primary" role="status">
@@ -364,6 +377,7 @@
 <script>
     // 全局变量
     let categoryChart, trendChart;
+    let ignoreUngrouped = false;
 
     // 页面加载完成后初始化
     document.addEventListener('DOMContentLoaded', function () {
@@ -401,6 +415,13 @@
                 ? '/api/bilibili/groups-distribution'
                 : '/api/analysis/distribution';
 
+            // 构建API参数
+            const apiParams = new URLSearchParams();
+            if (ignoreUngrouped) {
+                apiParams.append('ignore_ungrouped', 'true');
+            }
+            const paramString = apiParams.toString();
+
             // 并行加载所有数据
             const [
                 distributionData,
@@ -409,11 +430,11 @@
                 suggestionsData,
                 overviewData
             ] = await Promise.all([
-                fetch(distributionUrl).then(r => r.json()),
-                fetch('/api/analysis/trends').then(r => r.json()),
-                fetch('/api/analysis/inactive').then(r => r.json()),
-                fetch('/api/analysis/cleanup-suggestions').then(r => r.json()),
-                fetch('/api/data/stats/overview').then(r => r.json())
+                fetch(`${distributionUrl}${paramString ? '?' + paramString : ''}`).then(r => r.json()),
+                fetch(`/api/analysis/trends${paramString ? '?' + paramString : ''}`).then(r => r.json()),
+                fetch(`/api/analysis/inactive${paramString ? '?' + paramString : ''}`).then(r => r.json()),
+                fetch(`/api/analysis/cleanup-suggestions${paramString ? '?' + paramString : ''}`).then(r => r.json()),
+                fetch(`/api/data/stats/overview${paramString ? '?' + paramString : ''}`).then(r => r.json())
             ]);
 
             // 更新统计数据
@@ -475,8 +496,9 @@
             const categories = overview.categories || [];
             const categorizedCount = categories.reduce((sum, cat) => {
                 const category = cat.category;
-                // 排除"其他"、空字符串、null、undefined等未有效分类的情况
-                if (category && category.trim() !== '' && category !== '其他' && category !== 'null') {
+                // 排除"其他"、"默认分组"、"未分组"、空字符串、null、undefined等未有效分类的情况
+                const excludedCategories = ['其他', 'null', '默认分组', '未分组'];
+                if (category && category.trim() !== '' && !excludedCategories.includes(category)) {
                     return sum + cat.count;
                 }
                 return sum;
@@ -486,8 +508,9 @@
             // 计算待处理数（建议清理的用户）
             const uncategorizedCount = categories.reduce((sum, cat) => {
                 const category = cat.category;
-                // 包括"其他"、空字符串、null、undefined等未有效分类的情况
-                if (!category || category.trim() === '' || category === '其他' || category === 'null') {
+                // 包括"其他"、"默认分组"、"未分组"、空字符串、null、undefined等未有效分类的情况
+                const excludedCategories = ['其他', 'null', '默认分组', '未分组'];
+                if (!category || category.trim() === '' || excludedCategories.includes(category)) {
                     return sum + cat.count;
                 }
                 return sum;
@@ -938,6 +961,22 @@
      */
     function applySuggestion(index) {
         showNotification('建议功能开发中...', 'info');
+    }
+
+    /**
+     * 处理忽略未分组开关变化
+     */
+    function handleIgnoreUngroupedChange() {
+        ignoreUngrouped = document.getElementById('ignoreUngroupedSwitch').checked;
+
+        // 显示/隐藏智能洞察提示信息
+        const insightsNotice = document.getElementById('insights-ignore-notice');
+        if (insightsNotice) {
+            insightsNotice.style.display = ignoreUngrouped ? 'block' : 'none';
+        }
+
+        // 重新加载分析数据
+        loadAnalysisData();
     }
 
     /**

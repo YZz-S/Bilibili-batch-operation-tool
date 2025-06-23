@@ -103,7 +103,7 @@ async def export_following_csv(req: Request):
 
 
 @router.get("/stats/overview")
-async def get_overview_stats(req: Request):
+async def get_overview_stats(req: Request, ignore_ungrouped: bool = False):
     """获取概览统计"""
     try:
         db_manager = req.app.state.db_manager
@@ -112,6 +112,14 @@ async def get_overview_stats(req: Request):
         
         # 分类统计
         categories = await db_manager.get_categories_stats()
+        
+        # 如果启用忽略未分组，则过滤分类统计
+        if ignore_ungrouped:
+            categories = [
+                cat for cat in categories 
+                if cat.get("category") and cat.get("category").strip() != "" 
+                and cat.get("category") not in ["其他", "null", "默认分组", "未分组"]
+            ]
         
         # 最近关注用户（按关注时间排序，取前10个）
         following_list = await db_manager.get_following_list(

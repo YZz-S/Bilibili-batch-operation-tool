@@ -421,7 +421,7 @@ async def get_group_following(
 
 
 @router.get("/groups-distribution")
-async def get_groups_distribution(req: Request):
+async def get_groups_distribution(req: Request, ignore_ungrouped: bool = False):
     """获取B站分组分布分析"""
     try:
         db_manager = req.app.state.db_manager
@@ -431,6 +431,12 @@ async def get_groups_distribution(req: Request):
         distribution = {}
         for group in groups:
             group_name = group.get('group_name', '未知分组')
+            group_id = group.get('group_id', 0)
+            
+            # 如果启用忽略未分组，则跳过未分组数据
+            if ignore_ungrouped and (group_id == 0 or group_name in ['未分组', '默认分组']):
+                continue
+                
             # 使用实际用户数量，优先使用actual_count，其次是group_count
             user_count = group.get('actual_count', 0) or group.get('group_count', 0)
             if user_count > 0:

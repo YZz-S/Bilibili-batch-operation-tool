@@ -19,7 +19,7 @@ analyzer = FollowingAnalyzer()
 
 
 @router.get("/distribution")
-async def get_following_distribution(req: Request):
+async def get_following_distribution(req: Request, ignore_ungrouped: bool = False):
     """获取关注列表分布分析"""
     try:
         db_manager = req.app.state.db_manager
@@ -31,6 +31,14 @@ async def get_following_distribution(req: Request):
             if not user.get("category") or user.get("category").strip() == "":
                 # 只在内存中设置分类，不写入数据库
                 user["category"] = analyzer.classify_user(user)
+        
+        # 如果启用忽略未分组，则过滤掉未分组的用户
+        if ignore_ungrouped:
+            following_list = [
+                user for user in following_list 
+                if user.get("category") and user.get("category").strip() != "" 
+                and user.get("category") not in ["其他", "null", "默认分组", "未分组"]
+            ]
         
         distribution = analyzer.analyze_following_distribution(following_list)
         
@@ -44,11 +52,19 @@ async def get_following_distribution(req: Request):
 
 
 @router.get("/inactive")
-async def get_inactive_users(req: Request, limit: Optional[int] = 50):
+async def get_inactive_users(req: Request, limit: Optional[int] = 50, ignore_ungrouped: bool = False):
     """获取不活跃用户列表"""
     try:
         db_manager = req.app.state.db_manager
         following_list = await db_manager.get_following_list()
+        
+        # 如果启用忽略未分组，则过滤掉未分组的用户
+        if ignore_ungrouped:
+            following_list = [
+                user for user in following_list 
+                if user.get("category") and user.get("category").strip() != "" 
+                and user.get("category") not in ["其他", "null", "默认分组", "未分组"]
+            ]
         
         # 获取真实的用户统计数据，如果没有则使用默认值
         user_stats = []
@@ -106,11 +122,19 @@ async def get_inactive_users(req: Request, limit: Optional[int] = 50):
 
 
 @router.get("/cleanup-suggestions")
-async def get_cleanup_suggestions(req: Request):
+async def get_cleanup_suggestions(req: Request, ignore_ungrouped: bool = False):
     """获取清理建议"""
     try:
         db_manager = req.app.state.db_manager
         following_list = await db_manager.get_following_list()
+        
+        # 如果启用忽略未分组，则过滤掉未分组的用户
+        if ignore_ungrouped:
+            following_list = [
+                user for user in following_list 
+                if user.get("category") and user.get("category").strip() != "" 
+                and user.get("category") not in ["其他", "null", "默认分组", "未分组"]
+            ]
         
         # 获取用户统计数据
         user_stats = []
@@ -270,11 +294,19 @@ async def get_category_statistics(req: Request):
 
 
 @router.get("/trends")
-async def get_following_trends(req: Request):
+async def get_following_trends(req: Request, ignore_ungrouped: bool = False):
     """获取关注趋势分析"""
     try:
         db_manager = req.app.state.db_manager
         following_list = await db_manager.get_following_list()
+        
+        # 如果启用忽略未分组，则过滤掉未分组的用户
+        if ignore_ungrouped:
+            following_list = [
+                user for user in following_list 
+                if user.get("category") and user.get("category").strip() != "" 
+                and user.get("category") not in ["其他", "null", "默认分组", "未分组"]
+            ]
         
         # 按月份统计关注数量
         monthly_data = {}
