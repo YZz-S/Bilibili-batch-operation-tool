@@ -126,6 +126,17 @@ async def analysis_page(request: Request):
     return response
 
 
+@app.get("/user-stats", response_class=HTMLResponse)
+async def user_stats_page(request: Request):
+    """用户统计数据页面"""
+    response = templates.TemplateResponse("user-stats.html", {"request": request})
+    # 禁用缓存，确保前端总是获取最新版本
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     """设置页面"""

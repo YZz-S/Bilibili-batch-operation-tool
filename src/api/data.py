@@ -232,4 +232,271 @@ async def search_users(
         }
     except Exception as e:
         logger.error(f"搜索用户失败: {e}")
-        raise HTTPException(status_code=500, detail="搜索失败") 
+        raise HTTPException(status_code=500, detail="搜索失败")
+
+
+@router.get("/user-stats")
+async def get_user_stats_data(req: Request, page: int = 1, limit: int = 50, search: str = None, 
+                             has_real_data: bool = None, sort_by: str = "updated_at", 
+                             sort_order: str = "desc"):
+    """获取用户统计数据详情"""
+    try:
+        db_manager = req.app.state.db_manager
+        
+        # 获取user_stats表的数据统计
+        cursor = await db_manager._connection.execute(
+            "SELECT COUNT(*) as total FROM user_stats"
+        )
+        total_stats_count = (await cursor.fetchone())[0]
+        
+        # 获取最新更新时间
+        cursor = await db_manager._connection.execute(
+            "SELECT MAX(updated_at) as last_updated FROM user_stats"
+        )
+        result = await cursor.fetchone()
+        last_updated = result[0] if result and result[0] else None
+        
+        # 构建查询条件
+        where_conditions = []
+        params = []
+        
+        # 联表查询，获取用户基本信息和统计数据
+        base_sql = """
+            SELECT us.*, fl.uname, fl.face, fl.category, fl.created_at as user_created_at
+            FROM user_stats us
+            LEFT JOIN following_list fl ON us.uid = fl.uid
+            WHERE 1=1
+        """
+        
+        if search:
+            where_conditions.append("(fl.uname LIKE ? OR CAST(us.uid AS TEXT) LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        
+        if has_real_data is not None:
+            if has_real_data:
+                # 有真实数据：updated_at不为空且不等于默认时间
+                where_conditions.append("us.updated_at IS NOT NULL")
+            else:
+                # 无真实数据的用户：在following_list中但不在user_stats中
+                base_sql = """
+                    SELECT NULL as uid, NULL as fans_count, NULL as following_count, 
+                           NULL as video_count, NULL as total_views, NULL as last_video_time,
+                           NULL as activity_score, NULL as updated_at,
+                           fl.uname, fl.face, fl.category, fl.created_at as user_created_at,
+                           fl.uid as real_uid
+                    FROM following_list fl
+                    LEFT JOIN user_stats us ON fl.uid = us.uid
+                    WHERE us.uid IS NULL
+                """
+                where_conditions = []
+                params = []
+        
+        # 添加WHERE条件
+        if where_conditions:
+            base_sql += " AND " + " AND ".join(where_conditions)
+        
+        # 添加排序
+        valid_sort_fields = {
+            "updated_at": "us.updated_at",
+            "fans_count": "us.fans_count", 
+            "video_count": "us.video_count",
+            "activity_score": "us.activity_score",
+            "uname": "fl.uname",
+            "last_video_time": "us.last_video_time"
+        }
+        
+        if has_real_data is False:
+            # 对于无数据的用户，按用户名排序
+            base_sql += f" ORDER BY fl.uname {'DESC' if sort_order.lower() == 'desc' else 'ASC'}"
+        else:
+            sort_field = valid_sort_fields.get(sort_by, "us.updated_at")
+            order = "DESC" if sort_order.lower() == "desc" else "ASC"
+            base_sql += f" ORDER BY {sort_field} {order}"
+        
+        # 分页
+        offset = (page - 1) * limit
+        base_sql += " LIMIT ? OFFSET ?"
+        params.extend([limit, offset])
+        
+        # 执行查询
+        cursor = await db_manager._connection.execute(base_sql, params)
+        rows = await cursor.fetchall()
+        columns = [description[0] for description in cursor.description]
+        
+        # 转换为字典列表
+        users_data = []
+        for row in rows:
+            user_dict = dict(zip(columns, row))
+            
+            # 处理无数据的用户
+            if has_real_data is False:
+                user_dict['uid'] = user_dict.get('real_uid')
+                user_dict['has_real_data'] = False
+            else:
+                user_dict['has_real_data'] = True
+                
+            # 格式化时间
+            if user_dict.get('updated_at'):
+                try:
+                    if isinstance(user_dict['updated_at'], (int, float)):
+                        # 时间戳格式
+                        updated_time = datetime.fromtimestamp(user_dict['updated_at'])
+                        user_dict['updated_at_formatted'] = updated_time.strftime('%Y-%m-%d %H:%M:%S')
+                    elif isinstance(user_dict['updated_at'], str):
+                        # ISO格式字符串
+                        updated_time = datetime.fromisoformat(user_dict['updated_at'].replace('Z', '+00:00'))
+                        user_dict['updated_at_formatted'] = updated_time.strftime('%Y-%m-%d %H:%M:%S')
+                    else:
+                        user_dict['updated_at_formatted'] = str(user_dict['updated_at'])
+                except Exception as e:
+                    user_dict['updated_at_formatted'] = '格式错误'
+            else:
+                user_dict['updated_at_formatted'] = '无数据'
+                
+            # 计算最后视频天数
+            if user_dict.get('last_video_time') and user_dict['last_video_time'] > 0:
+                import time
+                days_ago = int((time.time() - user_dict['last_video_time']) / (24 * 3600))
+                user_dict['last_video_days'] = days_ago
+            else:
+                user_dict['last_video_days'] = None
+                
+            users_data.append(user_dict)
+        
+        # 获取总数（用于分页）
+        if has_real_data is False:
+            # 统计没有user_stats数据的用户数量
+            count_sql = """
+                SELECT COUNT(*)
+                FROM following_list fl
+                LEFT JOIN user_stats us ON fl.uid = us.uid
+                WHERE us.uid IS NULL
+            """
+            count_params = []
+            if search:
+                count_sql += " AND (fl.uname LIKE ? OR CAST(fl.uid AS TEXT) LIKE ?)"
+                count_params.extend([f"%{search}%", f"%{search}%"])
+        else:
+            # 统计有user_stats数据的用户数量
+            count_sql = """
+                SELECT COUNT(*)
+                FROM user_stats us
+                LEFT JOIN following_list fl ON us.uid = fl.uid
+                WHERE 1=1
+            """
+            count_params = []
+            if search:
+                count_sql += " AND (fl.uname LIKE ? OR CAST(us.uid AS TEXT) LIKE ?)"
+                count_params.extend([f"%{search}%", f"%{search}%"])
+        
+        cursor = await db_manager._connection.execute(count_sql, count_params)
+        total_count = (await cursor.fetchone())[0]
+        
+        # 获取总体统计信息
+        total_users = await db_manager.get_following_count()
+        
+        # 获取有统计数据的用户数量
+        cursor = await db_manager._connection.execute(
+            "SELECT COUNT(DISTINCT uid) FROM user_stats"
+        )
+        users_with_stats = (await cursor.fetchone())[0]
+        
+        return {
+            "users": users_data,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "pages": (total_count + limit - 1) // limit
+            },
+            "summary": {
+                "total_users": total_users,
+                "users_with_stats": users_with_stats,
+                "users_without_stats": total_users - users_with_stats,
+                "last_updated": last_updated,
+                "coverage_rate": round(users_with_stats / total_users * 100, 1) if total_users > 0 else 0
+            },
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"获取用户统计数据失败: {e}")
+        raise HTTPException(status_code=500, detail="获取用户统计数据失败")
+
+
+@router.get("/user-stats/summary")
+async def get_user_stats_summary(req: Request):
+    """获取用户统计数据概要信息"""
+    try:
+        db_manager = req.app.state.db_manager
+        
+        # 获取基本统计
+        total_users = await db_manager.get_following_count()
+        
+        cursor = await db_manager._connection.execute(
+            "SELECT COUNT(DISTINCT uid) FROM user_stats"
+        )
+        users_with_stats = (await cursor.fetchone())[0]
+        
+        # 获取最新更新时间和最旧更新时间
+        cursor = await db_manager._connection.execute(
+            "SELECT MAX(updated_at) as last_updated, MIN(updated_at) as first_updated FROM user_stats"
+        )
+        result = await cursor.fetchone()
+        last_updated = result[0] if result and result[0] else None
+        first_updated = result[1] if result and result[1] else None
+        
+        # 获取数据分布统计
+        cursor = await db_manager._connection.execute("""
+            SELECT 
+                AVG(fans_count) as avg_fans,
+                MAX(fans_count) as max_fans,
+                AVG(video_count) as avg_videos,
+                MAX(video_count) as max_videos,
+                AVG(activity_score) as avg_activity
+            FROM user_stats
+        """)
+        stats_result = await cursor.fetchone()
+        
+        # 获取最近7天和30天的更新数量
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        week_ago = (now - timedelta(days=7)).isoformat()
+        month_ago = (now - timedelta(days=30)).isoformat()
+        
+        cursor = await db_manager._connection.execute(
+            "SELECT COUNT(*) FROM user_stats WHERE updated_at >= ?", (week_ago,)
+        )
+        updated_this_week = (await cursor.fetchone())[0]
+        
+        cursor = await db_manager._connection.execute(
+            "SELECT COUNT(*) FROM user_stats WHERE updated_at >= ?", (month_ago,)
+        )
+        updated_this_month = (await cursor.fetchone())[0]
+        
+        return {
+            "basic_stats": {
+                "total_users": total_users,
+                "users_with_stats": users_with_stats,
+                "users_without_stats": total_users - users_with_stats,
+                "coverage_rate": round(users_with_stats / total_users * 100, 1) if total_users > 0 else 0
+            },
+            "time_info": {
+                "last_updated": last_updated,
+                "first_updated": first_updated,
+                "updated_this_week": updated_this_week,
+                "updated_this_month": updated_this_month
+            },
+            "data_distribution": {
+                "avg_fans": int(stats_result[0]) if stats_result[0] else 0,
+                "max_fans": int(stats_result[1]) if stats_result[1] else 0,
+                "avg_videos": int(stats_result[2]) if stats_result[2] else 0,
+                "max_videos": int(stats_result[3]) if stats_result[3] else 0,
+                "avg_activity": round(stats_result[4], 2) if stats_result[4] else 0
+            },
+            "generated_at": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"获取用户统计概要失败: {e}")
+        raise HTTPException(status_code=500, detail="获取用户统计概要失败") 

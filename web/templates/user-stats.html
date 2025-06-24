@@ -1,0 +1,627 @@
+{% extends "base.html" %}
+
+{% block title %}UP主统计数据{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-summary-card {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+
+    .stats-summary-card h4 {
+        color: white;
+        margin-bottom: 15px;
+    }
+
+    .summary-item {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .summary-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+    }
+
+    .last-updated-alert {
+        background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+        border: none;
+        color: #333;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 20px;
+        font-weight: bold;
+        text-align: center;
+    }
+
+    .data-table {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+    }
+
+    .table thead th {
+        background: #f8f9fa;
+        border: none;
+        padding: 15px;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .table tbody td {
+        padding: 12px 15px;
+        border-color: #f1f3f4;
+        vertical-align: middle;
+    }
+
+    .user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .stats-badge {
+        padding: 4px 8px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    .stats-badge.high {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .stats-badge.medium {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .stats-badge.low {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .filter-tabs {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .search-box {
+        max-width: 300px;
+    }
+
+    .pagination-container {
+        display: flex;
+        justify-content: center;
+        margin-top: 20px;
+    }
+
+    /* 深色模式支持 */
+    @media (prefers-color-scheme: dark) {
+        .data-table {
+            background: #2d3748;
+        }
+
+        .table thead th {
+            background: #4a5568;
+            color: #e9ecef;
+        }
+
+        .table tbody td {
+            background: #2d3748;
+            color: #e9ecef;
+            border-color: #4a5568;
+        }
+
+        .filter-tabs {
+            background: #2d3748;
+            color: #e9ecef;
+        }
+
+        .form-control {
+            background: #4a5568;
+            color: #e9ecef;
+            border-color: #6c757d;
+        }
+
+        .form-select {
+            background: #4a5568;
+            color: #e9ecef;
+            border-color: #6c757d;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- 页面标题 -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2><i class="fas fa-chart-bar me-2"></i>UP主统计数据</h2>
+        <button class="btn btn-primary" onclick="refreshData()">
+            <i class="fas fa-sync-alt me-2"></i>刷新数据
+        </button>
+    </div>
+
+    <!-- 数据更新时间提醒 -->
+    <div id="lastUpdatedAlert" class="alert last-updated-alert" role="alert">
+        <i class="fas fa-clock me-2"></i>
+        <span id="lastUpdatedText">正在加载数据更新时间...</span>
+    </div>
+
+    <!-- 统计概要 -->
+    <div class="stats-summary-card">
+        <h4><i class="fas fa-chart-pie me-2"></i>数据概要</h4>
+        <div class="row">
+            <div class="col-md-3">
+                <div class="summary-item">
+                    <div>
+                        <div>总用户数</div>
+                        <div class="summary-value" id="totalUsers">-</div>
+                    </div>
+                    <i class="fas fa-users fa-2x"></i>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="summary-item">
+                    <div>
+                        <div>有统计数据</div>
+                        <div class="summary-value" id="usersWithStats">-</div>
+                    </div>
+                    <i class="fas fa-check-circle fa-2x"></i>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="summary-item">
+                    <div>
+                        <div>数据覆盖率</div>
+                        <div class="summary-value" id="coverageRate">-</div>
+                    </div>
+                    <i class="fas fa-percentage fa-2x"></i>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="summary-item">
+                    <div>
+                        <div>本月更新</div>
+                        <div class="summary-value" id="monthlyUpdates">-</div>
+                    </div>
+                    <i class="fas fa-calendar-check fa-2x"></i>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 过滤和搜索 -->
+    <div class="filter-tabs">
+        <div class="row align-items-center">
+            <div class="col-md-3">
+                <label for="dataFilter" class="form-label">数据筛选</label>
+                <select class="form-select" id="dataFilter" onchange="filterData()">
+                    <option value="">全部用户</option>
+                    <option value="true">有统计数据</option>
+                    <option value="false">无统计数据</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="sortBy" class="form-label">排序方式</label>
+                <select class="form-select" id="sortBy" onchange="sortData()">
+                    <option value="updated_at">更新时间</option>
+                    <option value="fans_count">粉丝数</option>
+                    <option value="video_count">视频数</option>
+                    <option value="activity_score">活跃度</option>
+                    <option value="last_video_time">最后视频时间</option>
+                    <option value="uname">用户名</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="sortOrder" class="form-label">排序顺序</label>
+                <select class="form-select" id="sortOrder" onchange="sortData()">
+                    <option value="desc">降序</option>
+                    <option value="asc">升序</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="searchInput" class="form-label">搜索用户</label>
+                <input type="text" class="form-control search-box" id="searchInput" placeholder="输入用户名或UID"
+                    onkeyup="debounceSearch()">
+            </div>
+        </div>
+    </div>
+
+    <!-- 数据表格 -->
+    <div class="data-table">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>用户</th>
+                        <th>UID</th>
+                        <th>粉丝数</th>
+                        <th>视频数</th>
+                        <th>总播放量</th>
+                        <th>活跃度</th>
+                        <th>最后发布</th>
+                        <th>最后视频时间</th>
+                        <th>数据更新时间</th>
+                        <th>状态</th>
+                    </tr>
+                </thead>
+                <tbody id="userStatsTableBody">
+                    <!-- 数据将在这里动态加载 -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 分页 -->
+    <div class="pagination-container">
+        <nav>
+            <ul class="pagination" id="pagination">
+                <!-- 分页按钮将在这里动态生成 -->
+            </ul>
+        </nav>
+    </div>
+
+    <!-- 加载提示 -->
+    <div id="loadingIndicator" class="text-center py-4" style="display: none;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">加载中...</span>
+        </div>
+        <p class="mt-2">正在加载数据...</p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentPage = 1;
+    let currentLimit = 50;
+    let searchTimeout;
+
+    // 页面加载完成后初始化
+    document.addEventListener('DOMContentLoaded', function () {
+        loadSummary();
+        loadUserStatsData();
+    });
+
+    /**
+     * 加载统计概要
+     */
+    async function loadSummary() {
+        try {
+            const response = await fetch('/api/data/user-stats/summary');
+            const data = await response.json();
+
+            if (response.ok) {
+                updateSummaryDisplay(data);
+            } else {
+                console.error('获取概要数据失败:', data);
+                showMessage('获取概要数据失败', 'danger');
+            }
+        } catch (error) {
+            console.error('获取概要数据失败:', error);
+            showMessage('获取概要数据失败: ' + error.message, 'danger');
+        }
+    }
+
+    /**
+     * 更新概要显示
+     */
+    function updateSummaryDisplay(data) {
+        document.getElementById('totalUsers').textContent = data.basic_stats.total_users;
+        document.getElementById('usersWithStats').textContent = data.basic_stats.users_with_stats;
+        document.getElementById('coverageRate').textContent = data.basic_stats.coverage_rate + '%';
+        document.getElementById('monthlyUpdates').textContent = data.time_info.updated_this_month;
+
+        // 更新最后更新时间
+        const lastUpdatedText = document.getElementById('lastUpdatedText');
+        if (data.time_info.last_updated) {
+            const updateTime = new Date(data.time_info.last_updated * 1000).toLocaleString('zh-CN');
+            lastUpdatedText.textContent = `数据最后更新时间：${updateTime}`;
+        } else {
+            lastUpdatedText.textContent = '暂无统计数据，请先执行"同步真实数据"功能';
+        }
+    }
+
+    /**
+     * 加载用户统计数据
+     */
+    async function loadUserStatsData(page = 1) {
+        currentPage = page;
+        const searchValue = document.getElementById('searchInput').value;
+        const hasRealData = document.getElementById('dataFilter').value;
+        const sortBy = document.getElementById('sortBy').value;
+        const sortOrder = document.getElementById('sortOrder').value;
+
+        // 构建查询参数
+        const params = new URLSearchParams({
+            page: page,
+            limit: currentLimit,
+            sort_by: sortBy,
+            sort_order: sortOrder
+        });
+
+        if (searchValue) {
+            params.append('search', searchValue);
+        }
+
+        if (hasRealData !== '') {
+            params.append('has_real_data', hasRealData);
+        }
+
+        try {
+            showLoading(true);
+            const response = await fetch(`/api/data/user-stats?${params}`);
+            const data = await response.json();
+
+            if (response.ok) {
+                updateTableDisplay(data.users);
+                updatePagination(data.pagination);
+            } else {
+                console.error('获取用户数据失败:', data);
+                showMessage('获取用户数据失败', 'danger');
+            }
+        } catch (error) {
+            console.error('获取用户数据失败:', error);
+            showMessage('获取用户数据失败: ' + error.message, 'danger');
+        } finally {
+            showLoading(false);
+        }
+    }
+
+    /**
+     * 更新表格显示
+     */
+    function updateTableDisplay(users) {
+        const tbody = document.getElementById('userStatsTableBody');
+
+        if (users.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" class="text-center py-4">
+                        <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                        <p class="text-muted">没有找到符合条件的数据</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        const html = users.map(user => {
+            const hasData = user.has_real_data !== false;
+
+            return `
+                <tr>
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <img src="${user.face || '/static/img/default-avatar.svg'}" 
+                                 class="user-avatar me-2" 
+                                 alt="${user.uname || '未知用户'}"
+                                 onerror="this.src='/static/img/default-avatar.svg'">
+                            <div>
+                                <div class="fw-bold">${user.uname || '未知用户'}</div>
+                                <small class="text-muted">${user.category || '未分类'}</small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>${user.uid || '-'}</td>
+                    <td>${hasData ? formatNumber(user.fans_count || 0) : '-'}</td>
+                    <td>${hasData ? (user.video_count || 0) : '-'}</td>
+                    <td>${hasData ? formatNumber(user.total_views || 0) : '-'}</td>
+                    <td>
+                        ${hasData ? `
+                            <span class="stats-badge ${getActivityBadgeClass(user.activity_score)}">
+                                ${(user.activity_score || 0).toFixed(2)}
+                            </span>
+                        ` : '-'}
+                    </td>
+                    <td>
+                        ${hasData && user.last_video_days !== null ?
+                    `${user.last_video_days}天前` :
+                    (hasData ? '无记录' : '-')
+                }
+                    </td>
+                    <td>
+                        ${hasData && user.last_video_time && user.last_video_time > 0 ?
+                    formatVideoTime(user.last_video_time) :
+                    (hasData ? '无记录' : '-')
+                }
+                    </td>
+                    <td>${user.updated_at_formatted || '无数据'}</td>
+                    <td>
+                        <span class="badge ${hasData ? 'bg-success' : 'bg-warning'}">
+                            ${hasData ? '有数据' : '无数据'}
+                        </span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        tbody.innerHTML = html;
+    }
+
+    /**
+     * 获取活跃度徽章样式
+     */
+    function getActivityBadgeClass(score) {
+        if (score >= 0.7) return 'high';
+        if (score >= 0.4) return 'medium';
+        return 'low';
+    }
+
+    /**
+     * 格式化视频发布时间
+     */
+    function formatVideoTime(timestamp) {
+        if (!timestamp || timestamp <= 0) {
+            return '无记录';
+        }
+
+        try {
+            const date = new Date(timestamp * 1000);
+            return date.toLocaleString('zh-CN', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (error) {
+            console.error('时间格式化错误:', error);
+            return '格式错误';
+        }
+    }
+
+    /**
+     * 更新分页
+     */
+    function updatePagination(pagination) {
+        const paginationElement = document.getElementById('pagination');
+
+        if (pagination.pages <= 1) {
+            paginationElement.innerHTML = '';
+            return;
+        }
+
+        let html = '';
+
+        // 上一页
+        if (pagination.page > 1) {
+            html += `
+                <li class="page-item">
+                    <a class="page-link" href="#" onclick="loadUserStatsData(${pagination.page - 1})">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+            `;
+        }
+
+        // 页码
+        const startPage = Math.max(1, pagination.page - 2);
+        const endPage = Math.min(pagination.pages, pagination.page + 2);
+
+        if (startPage > 1) {
+            html += `<li class="page-item"><a class="page-link" href="#" onclick="loadUserStatsData(1)">1</a></li>`;
+            if (startPage > 2) {
+                html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            }
+        }
+
+        for (let i = startPage; i <= endPage; i++) {
+            html += `
+                <li class="page-item ${i === pagination.page ? 'active' : ''}">
+                    <a class="page-link" href="#" onclick="loadUserStatsData(${i})">${i}</a>
+                </li>
+            `;
+        }
+
+        if (endPage < pagination.pages) {
+            if (endPage < pagination.pages - 1) {
+                html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+            }
+            html += `<li class="page-item"><a class="page-link" href="#" onclick="loadUserStatsData(${pagination.pages})">${pagination.pages}</a></li>`;
+        }
+
+        // 下一页
+        if (pagination.page < pagination.pages) {
+            html += `
+                <li class="page-item">
+                    <a class="page-link" href="#" onclick="loadUserStatsData(${pagination.page + 1})">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            `;
+        }
+
+        paginationElement.innerHTML = html;
+    }
+
+    /**
+     * 显示/隐藏加载指示器
+     */
+    function showLoading(show) {
+        const indicator = document.getElementById('loadingIndicator');
+        const table = document.querySelector('.data-table');
+
+        if (show) {
+            indicator.style.display = 'block';
+            table.style.opacity = '0.5';
+        } else {
+            indicator.style.display = 'none';
+            table.style.opacity = '1';
+        }
+    }
+
+    /**
+     * 过滤数据
+     */
+    function filterData() {
+        loadUserStatsData(1);
+    }
+
+    /**
+     * 排序数据
+     */
+    function sortData() {
+        loadUserStatsData(1);
+    }
+
+    /**
+     * 防抖搜索
+     */
+    function debounceSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => {
+            loadUserStatsData(1);
+        }, 500);
+    }
+
+    /**
+     * 刷新数据
+     */
+    function refreshData() {
+        loadSummary();
+        loadUserStatsData(currentPage);
+        showMessage('数据已刷新', 'success', 2000);
+    }
+
+    /**
+     * 格式化数字
+     */
+    function formatNumber(num) {
+        if (num >= 10000) {
+            return (num / 10000).toFixed(1) + '万';
+        }
+        return num.toLocaleString();
+    }
+
+    /**
+     * 显示消息
+     */
+    function showMessage(message, type = 'info', duration = 5000) {
+        // 使用 BilibiliTool.showMessage 如果可用
+        if (window.BilibiliTool && window.BilibiliTool.showMessage) {
+            window.BilibiliTool.showMessage(message, type, duration);
+        } else {
+            alert(message);
+        }
+    }
+</script>
+{% endblock %}

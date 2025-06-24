@@ -32,10 +32,109 @@ function setupEventListeners() {
 }
 
 /**
+ * 加载数据更新时间信息
+ */
+async function loadLastUpdatedInfo() {
+    try {
+        const response = await fetch('/api/data/user-stats/summary');
+        const data = await response.json();
+
+        if (response.ok) {
+            const lastUpdatedAlert = document.getElementById('lastUpdatedAlert');
+            const lastUpdatedText = document.getElementById('lastUpdatedText');
+
+            if (data.time_info.last_updated) {
+                const updateTime = new Date(data.time_info.last_updated * 1000);
+                const now = new Date();
+                const daysDiff = Math.floor((now - updateTime) / (1000 * 60 * 60 * 24));
+
+                let alertClass = 'alert-info';
+                let bgGradient = 'linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%)';
+                let message = '';
+
+                if (daysDiff === 0) {
+                    message = `统计数据已更新至今日 ${updateTime.toLocaleString('zh-CN')}`;
+                    alertClass = 'alert-success';
+                    bgGradient = 'linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%)';
+                } else if (daysDiff <= 3) {
+                    message = `统计数据最后更新于 ${daysDiff} 天前 (${updateTime.toLocaleString('zh-CN')})`;
+                    alertClass = 'alert-info';
+                    bgGradient = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
+                } else if (daysDiff <= 7) {
+                    message = `统计数据已过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，建议重新同步`;
+                    alertClass = 'alert-warning';
+                    bgGradient = 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)';
+                } else {
+                    message = `统计数据严重过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，强烈建议立即同步`;
+                    alertClass = 'alert-danger';
+                    bgGradient = 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)';
+                }
+
+                lastUpdatedText.textContent = message;
+
+                // 更新样式
+                lastUpdatedAlert.className = `alert ${alertClass}`;
+                lastUpdatedAlert.style.background = bgGradient;
+                lastUpdatedAlert.style.display = 'block';
+            } else {
+                lastUpdatedText.textContent = '暂无统计数据，请先执行"同步真实数据"功能获取准确的用户统计信息';
+                lastUpdatedAlert.className = 'alert alert-warning';
+                lastUpdatedAlert.style.background = 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)';
+                lastUpdatedAlert.style.display = 'block';
+            }
+        }
+    } catch (error) {
+        console.error('获取更新时间失败:', error);
+        // 发生错误时不显示提醒框
+        const lastUpdatedAlert = document.getElementById('lastUpdatedAlert');
+        if (lastUpdatedAlert) {
+            lastUpdatedAlert.style.display = 'none';
+        }
+    }
+}
+
+/**
+ * 同步用户统计数据
+ */
+async function syncUserStats() {
+    if (!confirm('确定要开始同步用户统计数据吗？这可能需要较长时间。')) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/bilibili/sync-user-stats', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage('用户统计数据同步已启动', 'success');
+
+            // 跳转到数据分析页面查看进度
+            setTimeout(() => {
+                window.location.href = '/analysis';
+            }, 1500);
+        } else {
+            throw new Error(result.detail || '启动同步失败');
+        }
+    } catch (error) {
+        console.error('同步用户统计数据失败:', error);
+        showMessage('同步失败: ' + error.message, 'danger');
+    }
+}
+
+/**
  * 加载仪表板数据
  */
 async function loadDashboardData() {
     try {
+        // 先加载数据更新时间信息
+        loadLastUpdatedInfo();
+
         // 加载概览统计
         const statsResponse = await fetch('/api/data/stats/overview');
         const statsData = await statsResponse.json();
