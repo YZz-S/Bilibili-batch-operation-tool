@@ -118,7 +118,12 @@ async def groups_page(request: Request):
 @app.get("/analysis", response_class=HTMLResponse)
 async def analysis_page(request: Request):
     """数据分析页面"""
-    return templates.TemplateResponse("analysis.html", {"request": request})
+    response = templates.TemplateResponse("analysis.html", {"request": request})
+    # 禁用缓存，确保前端总是获取最新版本
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.get("/settings", response_class=HTMLResponse)

@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import asyncio
 from datetime import datetime
+import gc
 
 from ..bilibili.api import get_bilibili_api
 from ..bilibili.analyzer import FollowingAnalyzer
@@ -730,7 +731,7 @@ async def fix_user_levels(req: Request):
 
 
 @router.post("/sync-user-stats")
-async def sync_user_stats(req: Request, limit: int = 10):
+async def sync_user_stats(req: Request, background_tasks: BackgroundTasks, limit: int = 0):
     """同步用户真实统计数据（从B站API获取）"""
     try:
         db_manager = req.app.state.db_manager
@@ -739,13 +740,16 @@ async def sync_user_stats(req: Request, limit: int = 10):
         if not api.is_configured():
             raise HTTPException(status_code=400, detail="请先配置哔哩哔哩Cookie")
         
+        # 创建任务ID和进度跟踪
+        import time
+        task_id = f"sync_stats_{int(time.time())}"
+        
+        # 初始化进度跟踪缓存
+        if not hasattr(db_manager, '_sync_progress_cache'):
+            db_manager._sync_progress_cache = {}
+        
         # 获取所有关注的用户
         following_list = await db_manager.get_following_list()
-        
-        updated_count = 0
-        error_count = 0
-        consecutive_failures = 0
-        max_consecutive_failures = 5
         
         # 根据limit决定处理用户数量
         if limit == 0:
@@ -755,17 +759,83 @@ async def sync_user_stats(req: Request, limit: int = 10):
             users_to_process = following_list[:limit]
             logger.info(f"开始同步 {len(users_to_process)} 个用户的真实统计数据")
         
+        # 初始化进度信息
+        progress_info = {
+            "task_id": task_id,
+            "status": "running",
+            "progress": 0,
+            "total_users": len(users_to_process),
+            "processed_users": 0,
+            "updated_count": 0,
+            "error_count": 0,
+            "current_user": "",
+            "start_time": datetime.now(),
+            "end_time": None,
+            "message": "开始同步用户统计数据..."
+        }
+        db_manager._sync_progress_cache[task_id] = progress_info
+        
+        # 在后台执行同步任务
+        background_tasks.add_task(_sync_user_stats_task, db_manager, task_id, users_to_process, limit)
+        
+        return {
+            "message": "用户统计数据同步任务已启动",
+            "task_id": task_id,
+            "total_users": len(users_to_process),
+            "status": "started"
+        }
+        
+    except Exception as e:
+        logger.error(f"启动同步用户统计数据任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动同步失败: {str(e)}")
+
+
+async def _sync_user_stats_task(db_manager, task_id: str, users_to_process: list, limit: int):
+    """同步用户统计数据的后台任务"""
+    api = None
+    try:
+        api = await get_bilibili_api()
+        
+        # 确保缓存存在
+        if not hasattr(db_manager, '_sync_progress_cache'):
+            db_manager._sync_progress_cache = {}
+        
+        # 检查任务是否还存在
+        if task_id not in db_manager._sync_progress_cache:
+            logger.error(f"任务 {task_id} 的进度缓存不存在，无法执行同步")
+            return
+        
+        # 添加调试信息
+        logger.info(f"后台任务开始 - task_id: {task_id}, 用户数量: {len(users_to_process)}")
+        
+        updated_count = 0
+        error_count = 0
+        consecutive_failures = 0
+        max_consecutive_failures = 5
+        
         for i, user in enumerate(users_to_process):
             try:
                 uid = user["uid"]
                 uname = user.get('uname', str(uid))
                 
+                # 确保缓存仍然存在
+                if task_id not in db_manager._sync_progress_cache:
+                    logger.warning(f"任务 {task_id} 的进度缓存已丢失，停止同步")
+                    break
+                
                 # 检测连续失败次数，避免被风控
                 if consecutive_failures >= max_consecutive_failures:
+                    db_manager._sync_progress_cache[task_id]["message"] = f"检测到连续 {consecutive_failures} 次失败，可能触发风控，停止同步"
+                    db_manager._sync_progress_cache[task_id]["status"] = "stopped"
                     logger.warning(f"检测到连续 {consecutive_failures} 次失败，可能触发风控，停止同步")
                     break
                 
+                # 更新当前处理状态（开始处理前）
+                db_manager._sync_progress_cache[task_id]["current_user"] = uname
+                db_manager._sync_progress_cache[task_id]["message"] = f"正在同步用户 {uname} ({i+1}/{len(users_to_process)})"
+                
                 # 从B站API获取真实统计数据
+                logger.info(f"开始获取用户 {uname} (UID: {uid}) 的统计数据...")
                 real_stats = await api.get_user_stats(uid)
                 
                 if real_stats:
@@ -800,54 +870,160 @@ async def sync_user_stats(req: Request, limit: int = 10):
                             real_stats["last_video_time"], real_stats["activity_score"]
                         ))
                     
+                    # 立即提交每个用户的更改，避免程序异常退出时数据丢失
+                    await db_manager._connection.commit()
+                    
                     updated_count += 1
                     consecutive_failures = 0  # 成功后重置失败计数
-                    logger.info(f"已更新用户 {uname} 的真实统计数据")
+                    logger.info(f"已更新用户 {uname} 的真实统计数据 (成功: {updated_count}, 失败: {error_count})")
                 else:
                     error_count += 1
                     consecutive_failures += 1
-                    logger.warning(f"获取用户 {uname} 统计数据失败，连续失败 {consecutive_failures} 次")
+                    logger.warning(f"获取用户 {uname} 统计数据失败，连续失败 {consecutive_failures} 次 (成功: {updated_count}, 失败: {error_count})")
                 
-                # 根据用户数量和失败情况调整延迟
+                # 确保缓存仍然存在再更新进度
+                if task_id in db_manager._sync_progress_cache:
+                    # 处理完成后立即更新所有进度信息，确保数据一致性
+                    db_manager._sync_progress_cache[task_id]["processed_users"] = i + 1
+                    db_manager._sync_progress_cache[task_id]["updated_count"] = updated_count
+                    db_manager._sync_progress_cache[task_id]["error_count"] = error_count
+                    # 修复进度计算，使用浮点数保留更高精度
+                    progress_percentage = round(((i + 1) / len(users_to_process)) * 100, 2)
+                    db_manager._sync_progress_cache[task_id]["progress"] = progress_percentage
+                    
+                    # 添加调试信息
+                    progress_info = db_manager._sync_progress_cache[task_id]
+                    logger.info(f"更新进度信息: processed={progress_info['processed_users']}, updated={progress_info['updated_count']}, error={progress_info['error_count']}, progress={progress_info['progress']}%")
+                    
+                    # 强制更新缓存引用，确保数据一致性
+                    db_manager._sync_progress_cache[task_id]["last_update"] = datetime.now().isoformat()
+                
+                # 根据用户数量和失败情况调整延迟，由于API限制增加延迟
                 if limit == 0:  # 全部用户模式，使用更长延迟
-                    base_delay = 2.0 if consecutive_failures == 0 else min(consecutive_failures * 1.0, 5.0)
+                    base_delay = 5.0 if consecutive_failures == 0 else min(consecutive_failures * 2.0, 15.0)
                 elif limit >= 50:  # 大批量模式
-                    base_delay = 1.5 if consecutive_failures == 0 else min(consecutive_failures * 0.8, 4.0)
+                    base_delay = 4.0 if consecutive_failures == 0 else min(consecutive_failures * 1.5, 12.0)
                 else:  # 小批量模式
-                    base_delay = 1.0 if consecutive_failures == 0 else min(consecutive_failures * 0.5, 3.0)
+                    base_delay = 3.0 if consecutive_failures == 0 else min(consecutive_failures * 1.0, 10.0)
                 
+                logger.info(f"等待 {base_delay:.1f} 秒后处理下一个用户...")
                 await asyncio.sleep(base_delay)
                 
-                # 每处理10个用户报告一次进度
-                if (i + 1) % 10 == 0:
+                # 每处理5个用户报告一次进度
+                if (i + 1) % 5 == 0:
                     logger.info(f"进度: {i + 1}/{len(users_to_process)}, 成功: {updated_count}, 失败: {error_count}")
                     
+                    # 每处理10个用户后强制进行垃圾回收，释放内存
+                    if (i + 1) % 10 == 0:
+                        gc.collect()
+                        logger.debug(f"已处理 {i + 1} 个用户，执行垃圾回收释放内存")
+                
             except Exception as e:
-                logger.error(f"同步用户 {user.get('uname', uid)} 统计数据失败: {e}")
                 error_count += 1
                 consecutive_failures += 1
+                logger.error(f"同步用户 {user.get('uname', uid)} 统计数据失败: {e} (成功: {updated_count}, 失败: {error_count})")
+                
+                # 确保缓存仍然存在再更新错误状态
+                if task_id in db_manager._sync_progress_cache:
+                    # 立即更新错误状态到进度信息，确保前端能获取到最新进度
+                    db_manager._sync_progress_cache[task_id]["updated_count"] = updated_count
+                    db_manager._sync_progress_cache[task_id]["error_count"] = error_count
+                    db_manager._sync_progress_cache[task_id]["processed_users"] = i + 1
+                    db_manager._sync_progress_cache[task_id]["progress"] = round(((i + 1) / len(users_to_process)) * 100, 2)
+                    
+                    # 添加调试信息
+                    progress_info = db_manager._sync_progress_cache[task_id]
+                    logger.info(f"异常后更新进度信息: processed={progress_info['processed_users']}, updated={progress_info['updated_count']}, error={progress_info['error_count']}")
         
-        # 提交更改
-        await db_manager._connection.commit()
+        # 数据库更改已在每个用户处理后立即提交，无需再次提交
         
-        # 构建返回消息
-        wind_control_msg = ""
-        if consecutive_failures >= max_consecutive_failures:
-            wind_control_msg = "（因检测到可能的风控限制而提前停止）"
+        # 确保缓存仍然存在再更新最终状态
+        if task_id in db_manager._sync_progress_cache:
+            # 更新最终进度信息
+            db_manager._sync_progress_cache[task_id]["status"] = "completed" if consecutive_failures < max_consecutive_failures else "stopped"
+            db_manager._sync_progress_cache[task_id]["progress"] = 100
+            db_manager._sync_progress_cache[task_id]["processed_users"] = len(users_to_process)
+            db_manager._sync_progress_cache[task_id]["updated_count"] = updated_count
+            db_manager._sync_progress_cache[task_id]["error_count"] = error_count
+            db_manager._sync_progress_cache[task_id]["end_time"] = datetime.now()
+            
+            # 构建返回消息
+            wind_control_msg = ""
+            if consecutive_failures >= max_consecutive_failures:
+                wind_control_msg = "（因检测到可能的风控限制而提前停止）"
+                db_manager._sync_progress_cache[task_id]["message"] = f"同步停止{wind_control_msg}：已处理 {db_manager._sync_progress_cache[task_id]['processed_users']} 个用户"
+            else:
+                db_manager._sync_progress_cache[task_id]["message"] = f"同步完成：成功更新 {updated_count} 个用户，失败 {error_count} 个用户"
         
-        return {
-            "message": f"用户统计数据同步完成{wind_control_msg}",
-            "updated_count": updated_count,
-            "error_count": error_count,
-            "total_processed": min(i + 1, len(users_to_process)) if 'i' in locals() else 0,
-            "total_users": len(users_to_process),
-            "wind_control_detected": consecutive_failures >= max_consecutive_failures,
-            "note": "这是真实的B站数据，包含准确的视频数量和最后更新时间"
-        }
+        logger.info(f"用户统计数据同步任务 {task_id} 完成：更新 {updated_count} 个用户，失败 {error_count} 个用户")
         
     except Exception as e:
-        logger.error(f"同步用户统计数据失败: {e}")
-        raise HTTPException(status_code=500, detail=f"同步失败: {str(e)}")
+        import traceback
+        error_details = traceback.format_exc()
+        logger.error(f"同步用户统计数据任务失败: {e}")
+        logger.error(f"错误详情: {error_details}")
+        
+        # 更新错误状态
+        if hasattr(db_manager, '_sync_progress_cache') and task_id in db_manager._sync_progress_cache:
+            db_manager._sync_progress_cache[task_id]["status"] = "failed"
+            db_manager._sync_progress_cache[task_id]["message"] = f"同步失败: {str(e)}"
+            db_manager._sync_progress_cache[task_id]["end_time"] = datetime.now()
+    
+    finally:
+        # 确保API资源被正确清理
+        if api is not None:
+            try:
+                await api.close()
+            except Exception as e:
+                logger.warning(f"关闭API连接时出错: {e}")
+
+
+@router.get("/sync-user-stats/{task_id}/progress")
+async def get_sync_progress(task_id: str, req: Request):
+    """获取用户统计数据同步进度"""
+    try:
+        db_manager = req.app.state.db_manager
+        
+        # 添加调试信息
+        logger.info(f"获取同步进度请求 - task_id: {task_id}")
+        logger.info(f"_sync_progress_cache 是否存在: {hasattr(db_manager, '_sync_progress_cache')}")
+        
+        if hasattr(db_manager, '_sync_progress_cache'):
+            logger.info(f"缓存中的所有task_id: {list(db_manager._sync_progress_cache.keys())}")
+            if task_id in db_manager._sync_progress_cache:
+                progress_info = db_manager._sync_progress_cache[task_id]
+                logger.info(f"找到进度信息: processed={progress_info.get('processed_users', 0)}, updated={progress_info.get('updated_count', 0)}")
+            else:
+                logger.warning(f"task_id {task_id} 不在缓存中")
+        
+        if not hasattr(db_manager, '_sync_progress_cache') or task_id not in db_manager._sync_progress_cache:
+            raise HTTPException(status_code=404, detail="任务不存在或已过期")
+        
+        progress_info = db_manager._sync_progress_cache[task_id]
+        
+        # 返回进度信息
+        result = {
+            "task_id": task_id,
+            "status": progress_info.get("status", "running"),
+            "progress": progress_info.get("progress", 0),
+            "total_users": progress_info.get("total_users", 0),
+            "processed_users": progress_info.get("processed_users", 0),
+            "updated_count": progress_info.get("updated_count", 0),
+            "error_count": progress_info.get("error_count", 0),
+            "current_user": progress_info.get("current_user", ""),
+            "message": progress_info.get("message", "正在同步..."),
+            "start_time": progress_info["start_time"].isoformat() if progress_info.get("start_time") else "",
+            "end_time": progress_info["end_time"].isoformat() if progress_info.get("end_time") else ""
+        }
+        
+        logger.info(f"返回进度信息: {result}")
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取同步进度失败: {e}")
+        raise HTTPException(status_code=500, detail="获取同步进度失败")
 
 
 @router.post("/one-click-update")
@@ -1054,6 +1230,9 @@ async def _one_click_update_task(db_manager, task_id):
                                 real_stats["video_count"], real_stats["total_views"],
                                 real_stats["last_video_time"], real_stats["activity_score"]
                             ))
+                        
+                        # 立即提交每个用户的更改，避免程序异常退出时数据丢失
+                        await db_manager._connection.commit()
                         
                         updated_count += 1
                         consecutive_failures = 0

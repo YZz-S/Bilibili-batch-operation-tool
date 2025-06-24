@@ -521,14 +521,14 @@
                     <strong><i class="fas fa-exclamation-triangle"></i> 数据说明：</strong><br>
                     当前使用模拟数据，可能不准确。
                     <div class="mt-2">
-                        <button class="btn btn-outline-primary btn-sm me-2" onclick="syncRealUserStats(10)">
-                            <i class="fas fa-sync"></i> 同步10个用户
+                        <button class="btn btn-primary btn-sm me-2" onclick="syncRealUserStats(0)">
+                            <i class="fas fa-globe"></i> 同步全部用户
                         </button>
                         <button class="btn btn-outline-success btn-sm me-2" onclick="syncRealUserStats(50)">
                             <i class="fas fa-sync-alt"></i> 同步50个用户
                         </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="syncRealUserStats(0)">
-                            <i class="fas fa-globe"></i> 同步全部用户
+                        <button class="btn btn-outline-secondary btn-sm" onclick="syncRealUserStats(10)">
+                            <i class="fas fa-sync"></i> 同步10个用户
                         </button>
                     </div>
                 </div>
@@ -1558,7 +1558,7 @@
     /**
      * 同步真实用户统计数据
      */
-    async function syncRealUserStats(limit = 10) {
+    async function syncRealUserStats(limit = 0) {
         // 请求通知权限
         await requestNotificationPermission();
 
@@ -1575,11 +1575,6 @@
 
             // 创建同步控制器
             syncController = new AbortController();
-            const timeoutId = setTimeout(() => {
-                if (syncController) {
-                    syncController.abort();
-                }
-            }, 300000); // 5分钟超时
 
             // 开始同步
             const url = limit === 0 ? '/api/bilibili/sync-user-stats' : `/api/bilibili/sync-user-stats?limit=${limit}`;
@@ -1591,7 +1586,6 @@
                 signal: syncController.signal
             });
 
-            clearTimeout(timeoutId);
             console.log('API响应状态:', response.status);
 
             if (!response.ok) {
@@ -1601,37 +1595,39 @@
             }
 
             const result = await response.json();
-            console.log('同步结果:', result);
+            console.log('同步启动结果:', result);
 
-            // 隐藏加载动画
-            hideFullscreenLoader();
+            // 如果API返回了task_id，则开始轮询进度
+            if (result.task_id) {
+                console.log('开始轮询同步进度，taskId:', result.task_id);
+                const syncResult = await pollSyncProgress(result.task_id);
 
-            // 显示结果
-            let message, type;
-            if (result.updated_count > 0) {
-                message = `✅ 数据同步成功！更新了 ${result.updated_count} 个用户的真实数据`;
-                type = 'success';
-
-                // 发送浏览器通知
-                sendNotification('数据同步完成', `成功更新了 ${result.updated_count} 个用户的真实数据`);
-
-                // 隐藏数据说明警告
-                const warningAlert = document.querySelector('.alert-warning');
-                if (warningAlert) {
-                    warningAlert.style.display = 'none';
+                // 检查是否被取消或超时
+                if (syncResult.cancelled) {
+                    console.log('同步被取消');
+                    return;
                 }
 
-                // 刷新分析数据
-                setTimeout(() => loadAnalysisData(), 1000);
+                if (syncResult.timeout) {
+                    console.log('同步超时');
+                    showToast('同步超时，但后台任务可能仍在进行', 'warning');
+                    return;
+                }
+
+                // 处理同步完成结果
+                const result_to_handle = {
+                    updated_count: syncResult.updated_count,
+                    error_count: syncResult.error_count,
+                    total_processed: syncResult.processed_users,
+                    total_users: syncResult.total_users,
+                    wind_control_detected: syncResult.status === 'stopped',
+                    message: syncResult.message
+                };
+                handleSyncComplete(result_to_handle);
             } else {
-                message = `⚠️ 同步完成，但没有成功更新数据。失败数量：${result.error_count}`;
-                type = 'warning';
-
-                // 发送浏览器通知
-                sendNotification('数据同步完成', `同步完成，但没有成功更新数据`);
+                // 向后兼容：如果没有task_id，直接显示结果
+                handleSyncComplete(result);
             }
-
-            showMessage(message, type);
 
         } catch (error) {
             hideFullscreenLoader();
@@ -1651,28 +1647,165 @@
     }
 
     /**
+     * 轮询同步进度
+     */
+    async function pollSyncProgress(taskId) {
+        return new Promise((resolve, reject) => {
+            const pollInterval = 5000; // 5秒轮询一次，减少服务器压力
+            const maxConsecutiveFailures = 10; // 最多连续失败10次
+            const maxTotalTime = 4 * 60 * 60 * 1000; // 最大总时间4小时
+
+            let consecutiveFailures = 0; // 连续失败次数
+            let totalPolls = 0; // 总轮询次数（仅用于日志）
+            const startTime = Date.now();
+
+            const poll = async () => {
+                try {
+                    const currentTime = Date.now();
+
+                    // 检查是否超过最大总时间（4小时）
+                    if (currentTime - startTime > maxTotalTime) {
+                        console.log('轮询停止，原因: 超过最大总时间（4小时）');
+                        resolve({ timeout: true, reason: 'max_time_exceeded' });
+                        return;
+                    }
+
+                    if (syncController === null) {
+                        console.log('轮询停止，原因: 同步控制器为空');
+                        resolve({ cancelled: true });
+                        return;
+                    }
+
+                    totalPolls++;
+                    console.log(`第 ${totalPolls} 次轮询进度，taskId: ${taskId}，连续失败: ${consecutiveFailures} 次`);
+
+                    const response = await fetch(`/api/bilibili/sync-user-stats/${taskId}/progress`);
+                    if (!response.ok) {
+                        throw new Error(`获取进度失败: ${response.status}`);
+                    }
+
+                    const progress = await response.json();
+                    console.log('轮询响应数据:', progress);
+
+                    // 成功获取进度，重置连续失败计数
+                    consecutiveFailures = 0;
+
+                    // 更新进度显示
+                    updateSyncProgress(progress);
+
+                    // 检查是否已完成
+                    if (progress.status === 'completed' || progress.status === 'failed' || progress.status === 'stopped') {
+                        console.log('同步任务完成，状态:', progress.status);
+                        resolve(progress);
+                        return;
+                    }
+
+                    // 继续轮询
+                    console.log(`准备进行第 ${totalPolls + 1} 次轮询，${pollInterval}ms 后执行`);
+                    setTimeout(poll, pollInterval);
+
+                } catch (error) {
+                    consecutiveFailures++;
+                    console.error(`轮询失败 (第 ${consecutiveFailures} 次连续失败):`, error);
+
+                    // 检查是否连续失败过多
+                    if (consecutiveFailures >= maxConsecutiveFailures) {
+                        console.error('轮询停止，原因: 连续失败次数过多');
+                        reject(new Error(`连续失败 ${consecutiveFailures} 次，停止轮询`));
+                        return;
+                    }
+
+                    // 失败后等待更长时间再重试
+                    const retryDelay = Math.min(pollInterval * Math.pow(2, consecutiveFailures - 1), 30000); // 指数退避，最大30秒
+                    console.log(`${retryDelay}ms 后重试轮询`);
+                    setTimeout(poll, retryDelay);
+                }
+            };
+
+            // 开始轮询
+            poll();
+        });
+    }
+
+    /**
+     * 更新真实进度
+     */
+    function updateRealProgress(progress) {
+        const progressBar = document.getElementById('syncProgress');
+        const subtitle = document.getElementById('loaderSubtitle');
+        const info = document.getElementById('loaderInfo');
+
+        if (progressBar) {
+            progressBar.style.width = progress.progress + '%';
+        }
+
+        if (subtitle) {
+            const newText = progress.message || `正在同步用户数据 (${progress.processed_users}/${progress.total_users})`;
+            subtitle.textContent = newText;
+        }
+
+        if (info) {
+            const successRate = progress.processed_users > 0 ?
+                ((progress.updated_count / progress.processed_users) * 100).toFixed(1) : 100;
+            const newInfoText = `已处理: ${progress.processed_users}/${progress.total_users} | 成功: ${progress.updated_count} | 失败: ${progress.error_count} | 成功率: ${successRate}%`;
+            info.textContent = newInfoText;
+        }
+    }
+
+    /**
+     * 处理同步完成
+     */
+    function handleSyncComplete(result) {
+        // 隐藏加载动画
+        hideFullscreenLoader();
+
+        // 显示结果
+        let message, type;
+        if (result.updated_count > 0) {
+            message = `✅ 数据同步成功！更新了 ${result.updated_count} 个用户的真实数据`;
+            type = 'success';
+
+            // 发送浏览器通知
+            sendNotification('数据同步完成', `成功更新了 ${result.updated_count} 个用户的真实数据`);
+
+            // 隐藏数据说明警告
+            const warningAlert = document.querySelector('.alert-warning');
+            if (warningAlert) {
+                warningAlert.style.display = 'none';
+            }
+
+            // 刷新分析数据
+            setTimeout(() => loadAnalysisData(), 1000);
+        } else {
+            message = `⚠️ 同步完成，但没有成功更新数据。失败数量：${result.error_count}`;
+            type = 'warning';
+
+            // 发送浏览器通知
+            sendNotification('数据同步完成', `同步完成，但没有成功更新数据`);
+        }
+
+        showMessage(message, type);
+    }
+
+    /**
      * 显示全屏加载动画
      */
     function showFullscreenLoader(limit) {
         const loader = document.getElementById('fullscreenLoader');
         const subtitle = document.getElementById('loaderSubtitle');
         const info = document.getElementById('loaderInfo');
+        const progress = document.getElementById('syncProgress');
 
         const limitText = limit === 0 ? '全部' : limit;
-        subtitle.textContent = `正在同步 ${limitText} 个用户的数据，从B站API获取准确信息...`;
+        subtitle.textContent = `正在启动同步任务...`;
+        info.textContent = '正在初始化，请稍候...';
 
-        if (limit === 0) {
-            info.textContent = '同步全部用户可能需要很长时间，请耐心等待...';
-        } else if (limit >= 50) {
-            info.textContent = '同步较多用户可能需要几分钟，请耐心等待...';
-        } else {
-            info.textContent = '正在处理中，请稍候...';
+        // 重置进度条
+        if (progress) {
+            progress.style.width = '0%';
         }
 
         loader.style.display = 'flex';
-
-        // 启动进度条动画
-        startProgressAnimation();
     }
 
     /**
@@ -1687,27 +1820,7 @@
         progress.style.width = '0%';
     }
 
-    /**
-     * 启动进度条动画
-     */
-    function startProgressAnimation() {
-        const progress = document.getElementById('syncProgress');
-        let width = 0;
 
-        const interval = setInterval(() => {
-            if (syncController === null) {
-                clearInterval(interval);
-                return;
-            }
-
-            width += Math.random() * 2;
-            if (width >= 95) {
-                width = 95; // 不要到100%，等实际完成再设为100%
-            }
-
-            progress.style.width = width + '%';
-        }, 500);
-    }
 
     /**
      * 取消同步
@@ -1841,6 +1954,16 @@
             showMessage('一键更新失败: ' + error.message, 'danger');
             sendNotification('一键更新失败', error.message);
         }
+    }
+
+    /**
+     * 更新同步进度显示
+     */
+    function updateSyncProgress(progress) {
+        console.log('进度更新:', progress.processed_users + '/' + progress.total_users + ' | 成功:' + progress.updated_count + ' | 失败:' + progress.error_count + ' | 进度:' + progress.progress + '%');
+
+        // 更新进度条
+        updateRealProgress(progress);
     }
 </script>
 {% endblock %}

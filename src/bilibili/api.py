@@ -25,9 +25,13 @@ class BilibiliAPI:
         self.cookie = get_config_value("bilibili.cookie", "")
         self.user_agent = get_config_value("bilibili.user_agent", "")
         self.api_delay = get_config_value("bilibili.api_delay", 1.0)
-        self.retry_times = get_config_value("bilibili.retry_times", 3)
+        self.retry_times = get_config_value("bilibili.retry_times", 8)  # 增加重试次数以应对频率限制
         self.timeout = get_config_value("bilibili.timeout", 30)
         self.fetch_user_details = get_config_value("bilibili.fetch_user_details", True)
+        
+        # 错误计数器，用于合并重复的错误日志
+        self._error_counters = {}
+        self._last_error_log_time = {}
         
         # API端点
         self.endpoints = {
@@ -77,26 +81,28 @@ class BilibiliAPI:
                         else:
                             error_code = data.get('code')
                             error_msg = data.get('message', '未知错误')
-                            self.logger.warning(f"API返回错误: {error_msg} (code: {error_code})")
                             
                             # 对特定错误代码进行特殊处理
                             if error_code == -352:
-                                self.logger.error("遇到风控限制 (-352)，建议检查以下项目：")
-                                self.logger.error("1. Cookie是否有效")
-                                self.logger.error("2. 是否触发了API频率限制")
-                                self.logger.error("3. 账号是否被风控")
-                                self.logger.error("等待更长时间后重试...")
-                                await asyncio.sleep(5)  # 遇到风控错误时等待更长时间
-                            elif error_code == -503:
-                                self.logger.warning("API调用过于频繁，等待后重试...")
-                                await asyncio.sleep(3)
+                                self._log_error_with_counter(f"wind_control_{error_code}", 
+                                    f"遇到风控限制 (-352)，建议检查Cookie和API频率限制", "error")
+                                await asyncio.sleep(10)  # 遇到风控错误时等待更长时间
+                                continue  # 重试
+                            elif error_code == -503 or error_code == -799 or "频繁" in error_msg:
+                                wait_time = 5 + attempt * 2  # 递增等待时间
+                                self._log_error_with_counter(f"rate_limit_{error_code}", 
+                                    f"API调用过于频繁，等待 {wait_time} 秒后重试", "warning")
+                                await asyncio.sleep(wait_time)
+                                continue  # 重试
                             elif error_code in [-101, -102]:
-                                self.logger.error("账号登录状态异常，请检查Cookie")
+                                self._log_error_with_counter(f"auth_error_{error_code}", 
+                                    "账号登录状态异常，请检查Cookie", "error")
                                 return None
-                            
-                            # 记录更多详细信息
-                            self.logger.debug(f"完整API响应: {data}")
-                            return None
+                            else:
+                                # 其他错误不重试
+                                self._log_error_with_counter(f"api_error_{error_code}", 
+                                    f"API返回错误: {error_msg} (code: {error_code})", "warning")
+                                return None
                     else:
                         self.logger.warning(f"HTTP错误: {response.status}")
                         response_text = await response.text()
@@ -521,6 +527,33 @@ class BilibiliAPI:
         except Exception as e:
             self.logger.error(f"获取用户 {uid} 统计信息失败: {e}")
             return None
+
+    def _log_error_with_counter(self, error_key: str, message: str, level: str = "warning"):
+        """记录错误日志，如果是重复错误则合并显示"""
+        current_time = time.time()
+        
+        # 更新错误计数
+        if error_key not in self._error_counters:
+            self._error_counters[error_key] = 0
+            self._last_error_log_time[error_key] = 0
+        
+        self._error_counters[error_key] += 1
+        
+        # 第一次出现错误或距离上次记录超过30秒时才记录日志
+        if (self._error_counters[error_key] == 1 or 
+            current_time - self._last_error_log_time[error_key] > 30):
+            
+            if self._error_counters[error_key] > 1:
+                message += f" (已重复 {self._error_counters[error_key]} 次)"
+            
+            if level == "error":
+                self.logger.error(message)
+            elif level == "warning":
+                self.logger.warning(message)
+            else:
+                self.logger.info(message)
+            
+            self._last_error_log_time[error_key] = current_time
 
 
 # 全局API实例
