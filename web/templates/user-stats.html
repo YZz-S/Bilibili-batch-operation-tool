@@ -411,10 +411,12 @@
                 <tr>
                     <td>
                         <div class="d-flex align-items-center">
-                            <img src="${user.face || '/static/img/default-avatar.svg'}" 
-                                 class="user-avatar me-2" 
-                                 alt="${user.uname || '未知用户'}"
-                                 onerror="this.src='/static/img/default-avatar.svg'">
+                            <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname || '未知用户'} 的主页">
+                                <img src="${user.face || '/static/img/default-avatar.svg'}" 
+                                     class="user-avatar me-2" 
+                                     alt="${user.uname || '未知用户'}"
+                                     onerror="this.src='/static/img/default-avatar.svg'">
+                            </a>
                             <div>
                                 <div class="fw-bold">${user.uname || '未知用户'}</div>
                                 <small class="text-muted">${user.category || '未分类'}</small>

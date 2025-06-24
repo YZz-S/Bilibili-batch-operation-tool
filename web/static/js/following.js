@@ -185,9 +185,11 @@ function renderUserList(users) {
                         <input class="form-check-input user-checkbox" type="checkbox" 
                                ${isSelected ? 'checked' : ''} onchange="toggleUser(${user.uid})">
                     </div>
-                    <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar" 
-                         onerror="this.src='/static/img/default-avatar.svg'"
-                         onload="this.style.opacity=1" style="opacity:0; transition: opacity 0.3s ease;">
+                    <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname} 的主页" style="z-index: 100; position: relative;">
+                        <img src="${avatarUrl}" alt="${user.uname}" class="user-avatar" 
+                             onerror="this.src='/static/img/default-avatar.svg'"
+                             onload="this.style.opacity=1" style="opacity:0; transition: opacity 0.3s ease;">
+                    </a>
                     <div class="user-info">
                         <div class="user-name">
                             ${user.uname}
@@ -226,7 +228,19 @@ function renderUserList(users) {
         `;
     });
 
+    // 添加调试日志
+    console.log('Following 用户列表渲染完成，用户头像链接已添加');
+
     userList.innerHTML = html;
+
+    // 验证头像链接是否正确添加
+    setTimeout(() => {
+        const avatarLinks = document.querySelectorAll('.avatar-link');
+        console.log(`找到 ${avatarLinks.length} 个头像链接`);
+        avatarLinks.forEach((link, index) => {
+            console.log(`头像链接 ${index + 1}: ${link.href}`);
+        });
+    }, 100);
 }
 
 /**

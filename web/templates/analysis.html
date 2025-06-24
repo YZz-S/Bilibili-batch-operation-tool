@@ -1227,9 +1227,11 @@
 
             html += `
             <div class="inactive-user">
-                <img src="${avatarUrl}" 
-                     alt="${user.uname}" class="inactive-avatar"
-                     onerror="this.src='/static/img/default-avatar.svg'">
+                <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname} 的主页">
+                    <img src="${avatarUrl}" 
+                         alt="${user.uname}" class="inactive-avatar"
+                         onerror="this.src='/static/img/default-avatar.svg'">
+                </a>
                 <div class="inactive-info">
                     <div class="inactive-name">${user.uname}</div>
                     <div class="inactive-reason">长期未更新内容</div>
@@ -1408,15 +1410,17 @@
             ).join('');
 
             return `
-                <div class="user-item border rounded p-3 mb-2" data-username="${user.uname.toLowerCase()}">
-                    <div class="row align-items-center">
-                        <div class="col-auto">
+                            <div class="user-item border rounded p-3 mb-2" data-username="${user.uname.toLowerCase()}">
+                <div class="row align-items-center">
+                    <div class="col-auto">
+                        <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname} 的主页">
                             <img src="${user.face || '/static/img/default-avatar.svg'}" 
                                  class="rounded-circle" 
                                  width="40" height="40" 
                                  alt="${user.uname}"
                                  onerror="this.src='/static/img/default-avatar.svg'">
-                        </div>
+                        </a>
+                    </div>
                         <div class="col">
                             <div class="fw-bold">${user.uname}</div>
                             <div class="text-muted small">

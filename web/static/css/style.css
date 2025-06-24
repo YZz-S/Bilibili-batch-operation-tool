@@ -111,6 +111,7 @@ body {
     transition: all 0.3s ease;
     border-radius: 50%;
     overflow: hidden;
+    position: relative;
 }
 
 .avatar-link:hover {
@@ -125,6 +126,24 @@ body {
 
 .avatar-link:hover img {
     filter: brightness(1.1);
+}
+
+/* 为头像链接添加一个微妙的悬停指示器 */
+.avatar-link::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 123, 255, 0.1);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    border-radius: 50%;
+}
+
+.avatar-link:hover::after {
+    opacity: 1;
 }
 
 /* 徽章样式 */

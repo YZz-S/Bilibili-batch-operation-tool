@@ -232,11 +232,13 @@ function loadRecentFollowing(recentData) {
 
         return `
             <div class="list-group-item d-flex align-items-center">
-                <img src="${avatarUrl}" 
-                     alt="${user.uname}" 
-                     class="user-avatar me-3"
-                     onerror="this.src='/static/img/default-avatar.svg'"
-                     onload="this.style.opacity=1" style="opacity:0; transition: opacity 0.3s ease;">
+                <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname} 的主页">
+                    <img src="${avatarUrl}" 
+                         alt="${user.uname}" 
+                         class="user-avatar me-3"
+                         onerror="this.src='/static/img/default-avatar.svg'"
+                         onload="this.style.opacity=1" style="opacity:0; transition: opacity 0.3s ease;">
+                </a>
                 <div class="flex-grow-1">
                     <h6 class="mb-1">${user.uname}</h6>
                     <p class="mb-1 text-muted small">${user.sign || '这个人很懒，什么都没有写～'}</p>
@@ -647,11 +649,13 @@ function displayInactiveUsersList(users) {
             <div class="user-item border rounded p-3 mb-2" data-username="${user.uname.toLowerCase()}">
                 <div class="row align-items-center">
                     <div class="col-auto">
-                        <img src="${user.face || '/static/img/default-avatar.svg'}" 
-                             class="rounded-circle" 
-                             width="40" height="40" 
-                             alt="${user.uname}"
-                             onerror="this.src='/static/img/default-avatar.svg'">
+                        <a href="https://space.bilibili.com/${user.uid}" target="_blank" class="avatar-link" title="点击访问 ${user.uname} 的主页">
+                            <img src="${user.face || '/static/img/default-avatar.svg'}" 
+                                 class="rounded-circle" 
+                                 width="40" height="40" 
+                                 alt="${user.uname}"
+                                 onerror="this.src='/static/img/default-avatar.svg'">
+                        </a>
                     </div>
                     <div class="col">
                         <div class="fw-bold">${user.uname}</div>

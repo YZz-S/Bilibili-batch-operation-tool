@@ -26,6 +26,31 @@
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
 
+    /* 头像链接样式 */
+    .avatar-link {
+        display: inline-block;
+        text-decoration: none;
+        transition: all 0.3s ease;
+        border-radius: 50%;
+        overflow: hidden;
+        position: relative;
+        z-index: 10;
+    }
+
+    .avatar-link:hover {
+        transform: scale(1.05);
+        box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+    }
+
+    .avatar-link img {
+        display: block;
+        transition: all 0.3s ease;
+    }
+
+    .avatar-link:hover img {
+        filter: brightness(1.1);
+    }
+
     .user-info {
         flex-grow: 1;
         margin-left: 15px;
@@ -179,6 +204,9 @@
             </button>
             <button class="btn btn-warning" onclick="fixUserLevels()">
                 <i class="fas fa-tools"></i> 修复等级信息
+            </button>
+            <button class="btn btn-secondary" onclick="testAvatarLinks()" title="测试头像点击功能">
+                <i class="fas fa-bug"></i> 测试头像链接
             </button>
         </div>
     </div>
@@ -369,5 +397,26 @@
 
     // 使switchCategoryType函数全局可访问
     window.switchCategoryType = switchCategoryType;
+
+    接功能的函数
+    window.testAvatarLinks = function () {
+        const avatarLinks = document.querySelectorAll('.avatar-link');
+        if (avatarLinks.length === 0) {
+            alert('未找到头像链接，请先加载用户数据');
+            return;
+        }
+
+        console.log(`找到 ${avatarLinks.length} 个头像链接:`);
+        avatarLinks.forEach((link, index) => {
+            console.log(`头像链接 ${index + 1}: ${link.href}`);
+            // 为每个链接添加临时边框以便识别
+            link.style.border = '2px solid red';
+            setTimeout(() => {
+                link.style.border = '';
+            }, 3000);
+        });
+
+        alert(`找到 ${avatarLinks.length} 个头像链接，已在控制台输出详情并临时高亮显示。请点击任意头像测试跳转功能。`);
+    };
 </script>
 {% endblock %}
