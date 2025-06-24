@@ -1573,6 +1573,11 @@
         try {
             console.log(`开始同步 ${limitText} 个用户的真实数据...`);
 
+            // 重置进度跟踪状态
+            if (window.lastProgressUpdate) {
+                delete window.lastProgressUpdate;
+            }
+
             // 创建同步控制器
             syncController = new AbortController();
 
@@ -1647,13 +1652,92 @@
     }
 
     /**
+     * 检查是否应该停止轮询
+     * @param {Object} progress - 当前进度信息
+     * @param {number} elapsedHours - 已耗时（小时）
+     * @param {number} totalPolls - 总轮询次数
+     * @returns {Object} 是否应该停止轮询的判断结果
+     */
+    function checkIfShouldStopPolling(progress, elapsedHours, totalPolls) {
+        // 1. 如果后端已经标记为超时，直接停止
+        if (progress.status === 'timeout') {
+            return {
+                shouldStop: true,
+                isTimeout: true,
+                reason: '后端检测到任务超时'
+            };
+        }
+
+        // 2. 如果后端已经标记为失败或停止，直接停止
+        if (progress.status === 'failed' || progress.status === 'stopped') {
+            return {
+                shouldStop: true,
+                isTimeout: false,
+                reason: `任务状态: ${progress.status}`
+            };
+        }
+
+        // 3. 极端情况：超过12小时且进度没有变化
+        if (elapsedHours > 12) {
+            return {
+                shouldStop: true,
+                isTimeout: true,
+                reason: '任务运行超过12小时，强制停止'
+            };
+        }
+
+        // 4. 检测任务是否真的卡住了（1小时内进度没有变化）
+        const currentTime = Date.now();
+        if (!window.lastProgressUpdate) {
+            window.lastProgressUpdate = {
+                time: currentTime,
+                processed: progress.processed_users || 0
+            };
+        } else {
+            const timeSinceLastUpdate = (currentTime - window.lastProgressUpdate.time) / (60 * 1000); // 分钟
+            const progressChanged = progress.processed_users !== window.lastProgressUpdate.processed;
+
+            if (progressChanged) {
+                // 进度有变化，更新记录
+                window.lastProgressUpdate = {
+                    time: currentTime,
+                    processed: progress.processed_users || 0
+                };
+            } else if (timeSinceLastUpdate > 60 && progress.status === 'running') {
+                // 1小时内进度没变化且状态还是running，可能卡住了
+                return {
+                    shouldStop: true,
+                    isTimeout: true,
+                    reason: '任务可能卡住（1小时内进度无变化）'
+                };
+            }
+        }
+
+        // 5. 轮询次数过多检测（超过7200次，约10小时）
+        if (totalPolls > 7200) {
+            return {
+                shouldStop: true,
+                isTimeout: true,
+                reason: '轮询次数过多（可能存在异常）'
+            };
+        }
+
+        // 继续轮询
+        return {
+            shouldStop: false,
+            isTimeout: false,
+            reason: ''
+        };
+    }
+
+    /**
      * 轮询同步进度
      */
     async function pollSyncProgress(taskId) {
         return new Promise((resolve, reject) => {
             const pollInterval = 5000; // 5秒轮询一次，减少服务器压力
-            const maxConsecutiveFailures = 10; // 最多连续失败10次
-            const maxTotalTime = 4 * 60 * 60 * 1000; // 最大总时间4小时
+            const maxConsecutiveFailures = 15; // 最多连续失败15次
+            // 移除固定的最大时间限制，改为基于任务状态的动态检测
 
             let consecutiveFailures = 0; // 连续失败次数
             let totalPolls = 0; // 总轮询次数（仅用于日志）
@@ -1662,14 +1746,9 @@
             const poll = async () => {
                 try {
                     const currentTime = Date.now();
+                    const elapsedHours = (currentTime - startTime) / (60 * 60 * 1000);
 
-                    // 检查是否超过最大总时间（4小时）
-                    if (currentTime - startTime > maxTotalTime) {
-                        console.log('轮询停止，原因: 超过最大总时间（4小时）');
-                        resolve({ timeout: true, reason: 'max_time_exceeded' });
-                        return;
-                    }
-
+                    // 检查用户是否取消了同步
                     if (syncController === null) {
                         console.log('轮询停止，原因: 同步控制器为空');
                         resolve({ cancelled: true });
@@ -1677,7 +1756,7 @@
                     }
 
                     totalPolls++;
-                    console.log(`第 ${totalPolls} 次轮询进度，taskId: ${taskId}，连续失败: ${consecutiveFailures} 次`);
+                    console.log(`第 ${totalPolls} 次轮询进度，taskId: ${taskId}，连续失败: ${consecutiveFailures} 次，已耗时: ${elapsedHours.toFixed(1)}小时`);
 
                     const response = await fetch(`/api/bilibili/sync-user-stats/${taskId}/progress`);
                     if (!response.ok) {
@@ -1690,12 +1769,31 @@
                     // 成功获取进度，重置连续失败计数
                     consecutiveFailures = 0;
 
+                    // 智能超时检测：基于任务状态而非固定时间
+                    const shouldStopPolling = checkIfShouldStopPolling(progress, elapsedHours, totalPolls);
+                    if (shouldStopPolling.shouldStop) {
+                        console.log('轮询停止，原因:', shouldStopPolling.reason);
+                        if (shouldStopPolling.isTimeout) {
+                            resolve({ timeout: true, reason: shouldStopPolling.reason, ...progress });
+                        } else {
+                            resolve({ cancelled: true, reason: shouldStopPolling.reason });
+                        }
+                        return;
+                    }
+
                     // 更新进度显示
                     updateSyncProgress(progress);
 
                     // 检查是否已完成
-                    if (progress.status === 'completed' || progress.status === 'failed' || progress.status === 'stopped') {
+                    if (progress.status === 'completed' || progress.status === 'failed' || progress.status === 'stopped' || progress.status === 'timeout') {
                         console.log('同步任务完成，状态:', progress.status);
+
+                        // 对于超时状态，添加特殊标记
+                        if (progress.status === 'timeout') {
+                            progress.timeout_detected = true;
+                            console.log('检测到任务超时，原因:', progress.message);
+                        }
+
                         resolve(progress);
                         return;
                     }
@@ -1747,7 +1845,29 @@
         if (info) {
             const successRate = progress.processed_users > 0 ?
                 ((progress.updated_count / progress.processed_users) * 100).toFixed(1) : 100;
-            const newInfoText = `已处理: ${progress.processed_users}/${progress.total_users} | 成功: ${progress.updated_count} | 失败: ${progress.error_count} | 成功率: ${successRate}%`;
+
+            // 计算预估剩余时间
+            let estimatedTimeText = '';
+            if (progress.processed_users > 0 && progress.start_time) {
+                try {
+                    const startTime = new Date(progress.start_time);
+                    const currentTime = new Date();
+                    const elapsedMinutes = (currentTime - startTime) / (1000 * 60);
+                    const avgTimePerUser = elapsedMinutes / progress.processed_users;
+                    const remainingUsers = progress.total_users - progress.processed_users;
+                    const estimatedRemainingMinutes = remainingUsers * avgTimePerUser;
+
+                    if (estimatedRemainingMinutes > 60) {
+                        estimatedTimeText = ` | 预计剩余: ${(estimatedRemainingMinutes / 60).toFixed(1)}小时`;
+                    } else if (estimatedRemainingMinutes > 0) {
+                        estimatedTimeText = ` | 预计剩余: ${Math.ceil(estimatedRemainingMinutes)}分钟`;
+                    }
+                } catch (e) {
+                    // 时间计算失败，忽略
+                }
+            }
+
+            const newInfoText = `已处理: ${progress.processed_users}/${progress.total_users} | 成功: ${progress.updated_count} | 失败: ${progress.error_count} | 成功率: ${successRate}%${estimatedTimeText}`;
             info.textContent = newInfoText;
         }
     }
@@ -1761,9 +1881,47 @@
 
         // 显示结果
         let message, type;
-        if (result.updated_count > 0) {
+
+        // 检查是否超时
+        if (result.status === 'timeout' || result.timeout_detected) {
+            message = `⏰ 数据同步超时！已处理 ${result.processed_users || 0}/${result.total_users || 0} 个用户，成功更新 ${result.updated_count || 0} 个，失败 ${result.error_count || 0} 个`;
+            type = 'warning';
+
+            if (result.message) {
+                message += `\n📝 详情：${result.message}`;
+            }
+
+            sendNotification('数据同步超时', `已处理 ${result.processed_users || 0}/${result.total_users || 0} 个用户`);
+
+            // 部分成功时仍然刷新数据
+            if (result.updated_count > 0) {
+                setTimeout(() => loadAnalysisData(), 1000);
+            }
+        }
+        // 检查是否被停止
+        else if (result.status === 'stopped') {
+            message = `⏹️ 数据同步已停止！已处理 ${result.processed_users || 0}/${result.total_users || 0} 个用户，成功更新 ${result.updated_count || 0} 个，失败 ${result.error_count || 0} 个`;
+            type = 'warning';
+
+            if (result.message) {
+                message += `\n📝 详情：${result.message}`;
+            }
+
+            sendNotification('数据同步停止', `已处理 ${result.processed_users || 0}/${result.total_users || 0} 个用户`);
+
+            // 部分成功时仍然刷新数据
+            if (result.updated_count > 0) {
+                setTimeout(() => loadAnalysisData(), 1000);
+            }
+        }
+        // 正常完成且有成功更新
+        else if (result.updated_count > 0) {
             message = `✅ 数据同步成功！更新了 ${result.updated_count} 个用户的真实数据`;
             type = 'success';
+
+            if (result.error_count > 0) {
+                message += `，失败 ${result.error_count} 个`;
+            }
 
             // 发送浏览器通知
             sendNotification('数据同步完成', `成功更新了 ${result.updated_count} 个用户的真实数据`);
@@ -1776,12 +1934,20 @@
 
             // 刷新分析数据
             setTimeout(() => loadAnalysisData(), 1000);
-        } else {
-            message = `⚠️ 同步完成，但没有成功更新数据。失败数量：${result.error_count}`;
+        }
+        // 同步完成但没有成功更新数据
+        else {
+            message = `⚠️ 同步完成，但没有成功更新数据。失败数量：${result.error_count || 0}`;
             type = 'warning';
 
             // 发送浏览器通知
             sendNotification('数据同步完成', `同步完成，但没有成功更新数据`);
+        }
+
+        // 检查是否遇到风控限制（向后兼容）
+        if (result.wind_control_detected && result.status !== 'stopped' && result.status !== 'timeout') {
+            message += `\n⚠️ 检测到可能的风控限制`;
+            type = 'warning';
         }
 
         showMessage(message, type);
@@ -1830,6 +1996,12 @@
             syncController.abort();
             syncController = null;
         }
+
+        // 清理进度跟踪状态
+        if (window.lastProgressUpdate) {
+            delete window.lastProgressUpdate;
+        }
+
         hideFullscreenLoader();
         showMessage('同步已取消', 'info');
     }

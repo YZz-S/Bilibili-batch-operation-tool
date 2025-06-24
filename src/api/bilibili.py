@@ -793,6 +793,9 @@ async def sync_user_stats(req: Request, background_tasks: BackgroundTasks, limit
 async def _sync_user_stats_task(db_manager, task_id: str, users_to_process: list, limit: int):
     """同步用户统计数据的后台任务"""
     api = None
+    start_time = datetime.now()
+    max_task_duration = 6 * 60 * 60  # 最大任务时长6小时
+    
     try:
         api = await get_bilibili_api()
         
@@ -811,10 +814,26 @@ async def _sync_user_stats_task(db_manager, task_id: str, users_to_process: list
         updated_count = 0
         error_count = 0
         consecutive_failures = 0
-        max_consecutive_failures = 5
+        max_consecutive_failures = 15  # 增加容忍度，避免过早停止
+        total_api_errors = 0
+        max_total_errors = len(users_to_process) // 2  # 允许最多一半用户失败
+        
+        # 风控检测优化
+        recent_failure_window = []  # 最近失败的时间窗口
+        failure_window_size = 30  # 30次请求的窗口
+        failure_rate_threshold = 0.7  # 失败率超过70%时认为可能遇到风控
         
         for i, user in enumerate(users_to_process):
             try:
+                # 检查任务超时
+                elapsed_time = (datetime.now() - start_time).total_seconds()
+                if elapsed_time > max_task_duration:
+                    logger.warning(f"任务 {task_id} 超过最大执行时间({max_task_duration/3600:.1f}小时)，停止同步")
+                    if task_id in db_manager._sync_progress_cache:
+                        db_manager._sync_progress_cache[task_id]["status"] = "timeout"
+                        db_manager._sync_progress_cache[task_id]["message"] = f"任务超时停止，已处理 {i+1} 个用户"
+                    break
+                
                 uid = user["uid"]
                 uname = user.get('uname', str(uid))
                 
@@ -823,20 +842,53 @@ async def _sync_user_stats_task(db_manager, task_id: str, users_to_process: list
                     logger.warning(f"任务 {task_id} 的进度缓存已丢失，停止同步")
                     break
                 
-                # 检测连续失败次数，避免被风控
-                if consecutive_failures >= max_consecutive_failures:
-                    db_manager._sync_progress_cache[task_id]["message"] = f"检测到连续 {consecutive_failures} 次失败，可能触发风控，停止同步"
-                    db_manager._sync_progress_cache[task_id]["status"] = "stopped"
-                    logger.warning(f"检测到连续 {consecutive_failures} 次失败，可能触发风控，停止同步")
+                # 改进的风控检测：基于最近的失败率而不是连续失败
+                if len(recent_failure_window) >= failure_window_size:
+                    recent_failures = sum(recent_failure_window)
+                    failure_rate = recent_failures / failure_window_size
+                    
+                    if failure_rate > failure_rate_threshold:
+                        logger.warning(f"检测到高失败率({failure_rate:.1%})，可能遇到风控限制，暂停60秒...")
+                        if task_id in db_manager._sync_progress_cache:
+                            db_manager._sync_progress_cache[task_id]["message"] = f"检测到高失败率，暂停60秒... ({i+1}/{len(users_to_process)})"
+                        await asyncio.sleep(60)  # 暂停1分钟
+                        recent_failure_window.clear()  # 清空失败窗口，重新开始
+                        consecutive_failures = 0  # 重置连续失败计数
+                
+                # 检查总错误率，如果太高则停止
+                if total_api_errors > max_total_errors:
+                    logger.warning(f"总错误数({total_api_errors})超过限制({max_total_errors})，停止同步")
+                    if task_id in db_manager._sync_progress_cache:
+                        db_manager._sync_progress_cache[task_id]["status"] = "stopped"
+                        db_manager._sync_progress_cache[task_id]["message"] = f"错误率过高，停止同步：已处理 {i+1} 个用户"
                     break
                 
                 # 更新当前处理状态（开始处理前）
-                db_manager._sync_progress_cache[task_id]["current_user"] = uname
-                db_manager._sync_progress_cache[task_id]["message"] = f"正在同步用户 {uname} ({i+1}/{len(users_to_process)})"
+                if task_id in db_manager._sync_progress_cache:
+                    db_manager._sync_progress_cache[task_id]["current_user"] = uname
+                    db_manager._sync_progress_cache[task_id]["message"] = f"正在同步用户 {uname} ({i+1}/{len(users_to_process)})"
+                    db_manager._sync_progress_cache[task_id]["last_heartbeat"] = datetime.now().isoformat()
                 
                 # 从B站API获取真实统计数据
                 logger.info(f"开始获取用户 {uname} (UID: {uid}) 的统计数据...")
-                real_stats = await api.get_user_stats(uid)
+                
+                # 添加API调用超时
+                try:
+                    real_stats = await asyncio.wait_for(api.get_user_stats(uid), timeout=30.0)
+                    api_success = real_stats is not None
+                except asyncio.TimeoutError:
+                    logger.warning(f"获取用户 {uname} 统计数据超时")
+                    real_stats = None
+                    api_success = False
+                except Exception as api_e:
+                    logger.warning(f"获取用户 {uname} 统计数据异常: {api_e}")
+                    real_stats = None
+                    api_success = False
+                
+                # 更新失败窗口
+                recent_failure_window.append(0 if api_success else 1)
+                if len(recent_failure_window) > failure_window_size:
+                    recent_failure_window.pop(0)
                 
                 if real_stats:
                     # 更新或插入到数据库
@@ -878,6 +930,7 @@ async def _sync_user_stats_task(db_manager, task_id: str, users_to_process: list
                     logger.info(f"已更新用户 {uname} 的真实统计数据 (成功: {updated_count}, 失败: {error_count})")
                 else:
                     error_count += 1
+                    total_api_errors += 1
                     consecutive_failures += 1
                     logger.warning(f"获取用户 {uname} 统计数据失败，连续失败 {consecutive_failures} 次 (成功: {updated_count}, 失败: {error_count})")
                 
@@ -900,18 +953,18 @@ async def _sync_user_stats_task(db_manager, task_id: str, users_to_process: list
                 
                 # 根据用户数量和失败情况调整延迟，由于API限制增加延迟
                 if limit == 0:  # 全部用户模式，使用更长延迟
-                    base_delay = 5.0 if consecutive_failures == 0 else min(consecutive_failures * 2.0, 15.0)
+                    base_delay = 6.0 if consecutive_failures == 0 else min(consecutive_failures * 2.0, 20.0)
                 elif limit >= 50:  # 大批量模式
-                    base_delay = 4.0 if consecutive_failures == 0 else min(consecutive_failures * 1.5, 12.0)
+                    base_delay = 5.0 if consecutive_failures == 0 else min(consecutive_failures * 1.5, 15.0)
                 else:  # 小批量模式
-                    base_delay = 3.0 if consecutive_failures == 0 else min(consecutive_failures * 1.0, 10.0)
+                    base_delay = 4.0 if consecutive_failures == 0 else min(consecutive_failures * 1.0, 12.0)
                 
                 logger.info(f"等待 {base_delay:.1f} 秒后处理下一个用户...")
                 await asyncio.sleep(base_delay)
                 
                 # 每处理5个用户报告一次进度
                 if (i + 1) % 5 == 0:
-                    logger.info(f"进度: {i + 1}/{len(users_to_process)}, 成功: {updated_count}, 失败: {error_count}")
+                    logger.info(f"进度: {i + 1}/{len(users_to_process)}, 成功: {updated_count}, 失败: {error_count}, 总耗时: {elapsed_time/60:.1f}分钟")
                     
                     # 每处理10个用户后强制进行垃圾回收，释放内存
                     if (i + 1) % 10 == 0:
@@ -920,6 +973,7 @@ async def _sync_user_stats_task(db_manager, task_id: str, users_to_process: list
                 
             except Exception as e:
                 error_count += 1
+                total_api_errors += 1
                 consecutive_failures += 1
                 logger.error(f"同步用户 {user.get('uname', uid)} 统计数据失败: {e} (成功: {updated_count}, 失败: {error_count})")
                 
@@ -939,23 +993,29 @@ async def _sync_user_stats_task(db_manager, task_id: str, users_to_process: list
         
         # 确保缓存仍然存在再更新最终状态
         if task_id in db_manager._sync_progress_cache:
+            # 判断任务完成状态
+            current_status = db_manager._sync_progress_cache[task_id].get("status", "running")
+            if current_status == "running":  # 只有在running状态下才更新为completed
+                final_status = "completed"
+            else:
+                final_status = current_status  # 保持已设置的状态（如timeout、stopped等）
+            
             # 更新最终进度信息
-            db_manager._sync_progress_cache[task_id]["status"] = "completed" if consecutive_failures < max_consecutive_failures else "stopped"
-            db_manager._sync_progress_cache[task_id]["progress"] = 100
-            db_manager._sync_progress_cache[task_id]["processed_users"] = len(users_to_process)
+            db_manager._sync_progress_cache[task_id]["status"] = final_status
+            db_manager._sync_progress_cache[task_id]["progress"] = 100 if final_status == "completed" else db_manager._sync_progress_cache[task_id].get("progress", 0)
             db_manager._sync_progress_cache[task_id]["updated_count"] = updated_count
             db_manager._sync_progress_cache[task_id]["error_count"] = error_count
             db_manager._sync_progress_cache[task_id]["end_time"] = datetime.now()
             
             # 构建返回消息
-            wind_control_msg = ""
-            if consecutive_failures >= max_consecutive_failures:
-                wind_control_msg = "（因检测到可能的风控限制而提前停止）"
-                db_manager._sync_progress_cache[task_id]["message"] = f"同步停止{wind_control_msg}：已处理 {db_manager._sync_progress_cache[task_id]['processed_users']} 个用户"
-            else:
+            if final_status == "completed":
                 db_manager._sync_progress_cache[task_id]["message"] = f"同步完成：成功更新 {updated_count} 个用户，失败 {error_count} 个用户"
+            elif final_status == "timeout":
+                db_manager._sync_progress_cache[task_id]["message"] = f"同步超时：已处理 {len(users_to_process)} 个用户中的 {db_manager._sync_progress_cache[task_id].get('processed_users', 0)} 个"
+            elif final_status == "stopped":
+                db_manager._sync_progress_cache[task_id]["message"] = f"同步停止：已处理 {db_manager._sync_progress_cache[task_id].get('processed_users', 0)} 个用户"
         
-        logger.info(f"用户统计数据同步任务 {task_id} 完成：更新 {updated_count} 个用户，失败 {error_count} 个用户")
+        logger.info(f"用户统计数据同步任务 {task_id} 完成：更新 {updated_count} 个用户，失败 {error_count} 个用户，状态: {final_status}")
         
     except Exception as e:
         import traceback
@@ -1001,6 +1061,45 @@ async def get_sync_progress(task_id: str, req: Request):
         
         progress_info = db_manager._sync_progress_cache[task_id]
         
+        # 检查任务是否超时（基于心跳机制）
+        current_time = datetime.now()
+        
+        # 检查是否有心跳时间记录
+        last_heartbeat_str = progress_info.get("last_heartbeat")
+        if last_heartbeat_str:
+            try:
+                last_heartbeat = datetime.fromisoformat(last_heartbeat_str)
+                time_since_heartbeat = (current_time - last_heartbeat).total_seconds()
+                
+                # 如果超过5分钟没有心跳且任务仍在运行，标记为超时
+                if time_since_heartbeat > 300 and progress_info.get("status") == "running":
+                    logger.warning(f"任务 {task_id} 超过5分钟没有心跳更新，标记为超时")
+                    progress_info["status"] = "timeout"
+                    progress_info["message"] = f"任务超时：超过5分钟未响应（最后心跳: {last_heartbeat_str}）"
+                    progress_info["end_time"] = current_time
+                    
+            except ValueError as e:
+                logger.warning(f"解析心跳时间失败: {e}")
+        
+        # 检查任务开始时间，如果总运行时间超过7小时且仍在运行，标记为超时
+        start_time = progress_info.get("start_time")
+        if start_time and progress_info.get("status") == "running":
+            try:
+                if isinstance(start_time, str):
+                    start_time = datetime.fromisoformat(start_time)
+                
+                total_runtime = (current_time - start_time).total_seconds()
+                max_runtime = 7 * 60 * 60  # 7小时
+                
+                if total_runtime > max_runtime:
+                    logger.warning(f"任务 {task_id} 总运行时间超过7小时，标记为超时")
+                    progress_info["status"] = "timeout"
+                    progress_info["message"] = f"任务超时：总运行时间超过7小时"
+                    progress_info["end_time"] = current_time
+                    
+            except (ValueError, TypeError) as e:
+                logger.warning(f"解析开始时间失败: {e}")
+        
         # 返回进度信息
         result = {
             "task_id": task_id,
@@ -1012,8 +1111,8 @@ async def get_sync_progress(task_id: str, req: Request):
             "error_count": progress_info.get("error_count", 0),
             "current_user": progress_info.get("current_user", ""),
             "message": progress_info.get("message", "正在同步..."),
-            "start_time": progress_info["start_time"].isoformat() if progress_info.get("start_time") else "",
-            "end_time": progress_info["end_time"].isoformat() if progress_info.get("end_time") else ""
+            "start_time": progress_info["start_time"].isoformat() if progress_info.get("start_time") and hasattr(progress_info["start_time"], 'isoformat') else str(progress_info.get("start_time", "")),
+            "end_time": progress_info["end_time"].isoformat() if progress_info.get("end_time") and hasattr(progress_info["end_time"], 'isoformat') else str(progress_info.get("end_time", ""))
         }
         
         logger.info(f"返回进度信息: {result}")
