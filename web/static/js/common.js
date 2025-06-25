@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', function () {
     initializeApp();
     checkApiStatus();
 
+    // 请求通知权限
+    requestNotificationPermission();
+
     // 每30秒检查一次API状态
     setInterval(checkApiStatus, 30000);
 });
@@ -32,7 +35,145 @@ function initializeApp() {
         return new bootstrap.Popover(popoverTriggerEl);
     });
 
+    // 绑定通知设置按钮事件
+    const notificationBtn = document.getElementById('notification-settings-btn');
+    if (notificationBtn) {
+        notificationBtn.addEventListener('click', function () {
+            // (Re)create the modal's HTML to ensure settings are fresh
+            createNotificationSettingsPanel();
+            const modalEl = document.getElementById('notificationSettingsModal');
+            if (modalEl) {
+                const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+                modal.show();
+            }
+        });
+    }
+
     console.log('应用初始化完成');
+}
+
+/**
+ * 请求浏览器通知权限
+ */
+async function requestNotificationPermission() {
+    if ("Notification" in window) {
+        if (Notification.permission === "default") {
+            try {
+                const permission = await Notification.requestPermission();
+                console.log('通知权限状态:', permission);
+
+                if (permission === "granted") {
+                    // 发送欢迎通知
+                    sendNotification('哔哩哔哩管理工具', '通知功能已启用，您将收到重要操作的提醒', {
+                        silent: true,
+                        badge: '/static/img/bilibili-logo.svg'
+                    });
+                }
+            } catch (error) {
+                console.error('请求通知权限失败:', error);
+            }
+        }
+    }
+}
+
+/**
+ * 发送浏览器通知
+ */
+function sendNotification(title, body, options = {}) {
+    if ("Notification" in window && Notification.permission === "granted") {
+        const defaultOptions = {
+            icon: '/static/img/bilibili-logo.svg',
+            badge: '/static/img/bilibili-logo.svg',
+            tag: 'bilibili-tool',
+            requireInteraction: false,
+            silent: false,
+            renotify: false,
+            ...options
+        };
+
+        try {
+            const notification = new Notification(title, {
+                body: body,
+                ...defaultOptions
+            });
+
+            // 点击通知时聚焦窗口
+            notification.onclick = function (event) {
+                event.preventDefault();
+                window.focus();
+                notification.close();
+            };
+
+            // 自动关闭通知（可配置）
+            if (options.autoClose !== false) {
+                setTimeout(() => {
+                    notification.close();
+                }, options.duration || 6000);
+            }
+
+            return notification;
+        } catch (error) {
+            console.error('发送通知失败:', error);
+        }
+    }
+}
+
+/**
+ * 发送成功通知
+ */
+function sendSuccessNotification(title, body, options = {}) {
+    return sendNotification(title, body, {
+        icon: '/static/img/success-icon.svg',
+        tag: 'success',
+        ...options
+    });
+}
+
+/**
+ * 发送错误通知
+ */
+function sendErrorNotification(title, body, options = {}) {
+    return sendNotification(title, body, {
+        icon: '/static/img/error-icon.svg',
+        tag: 'error',
+        requireInteraction: true,
+        ...options
+    });
+}
+
+/**
+ * 发送警告通知
+ */
+function sendWarningNotification(title, body, options = {}) {
+    return sendNotification(title, body, {
+        icon: '/static/img/warning-icon.svg',
+        tag: 'warning',
+        ...options
+    });
+}
+
+/**
+ * 发送信息通知
+ */
+function sendInfoNotification(title, body, options = {}) {
+    return sendNotification(title, body, {
+        icon: '/static/img/info-icon.svg',
+        tag: 'info',
+        ...options
+    });
+}
+
+/**
+ * 发送进度通知
+ */
+function sendProgressNotification(title, body, progress, options = {}) {
+    const progressBody = `${body} (${progress}%)`;
+    return sendNotification(title, progressBody, {
+        icon: '/static/img/progress-icon.svg',
+        tag: 'progress',
+        renotify: true,
+        ...options
+    });
 }
 
 /**
@@ -43,13 +184,28 @@ async function checkApiStatus() {
         const response = await fetch('/api/bilibili/status');
         const data = await response.json();
 
+        const wasOnline = isOnline;
         isOnline = data.configured && data.cookie_valid;
         updateStatusIndicator(isOnline);
 
+        // 状态变化时发送通知
+        if (wasOnline !== isOnline) {
+            if (isOnline) {
+                sendSuccessNotification('连接状态', 'B站API连接已恢复');
+            } else if (wasOnline) {
+                sendErrorNotification('连接状态', 'B站API连接已断开，请检查Cookie配置');
+            }
+        }
+
     } catch (error) {
         console.error('检查API状态失败:', error);
+        const wasOnline = isOnline;
         isOnline = false;
         updateStatusIndicator(false);
+
+        if (wasOnline) {
+            sendErrorNotification('连接错误', 'API状态检查失败，请检查网络连接');
+        }
     }
 }
 
@@ -96,6 +252,17 @@ function showMessage(message, type = 'info', duration = 5000) {
                 bsAlert.close();
             }
         }, duration);
+    }
+
+    // 根据消息类型发送通知
+    if (type === 'success') {
+        sendNotificationWithSettings('操作成功', message, 'success', { silent: true });
+    } else if (type === 'danger') {
+        sendNotificationWithSettings('操作失败', message, 'error');
+    } else if (type === 'warning') {
+        sendNotificationWithSettings('注意', message, 'warning', { silent: true });
+    } else if (type === 'info') {
+        sendNotificationWithSettings('信息', message, 'info', { silent: true });
     }
 }
 
@@ -348,6 +515,269 @@ function scrollToElement(element, offset = 0) {
     }
 }
 
+/**
+ * 通知设置管理
+ */
+const NotificationSettings = {
+    // 默认设置
+    defaults: {
+        enabled: true,
+        showSuccess: true,
+        showError: true,
+        showWarning: true,
+        showInfo: false,
+        autoClose: true,
+        duration: 6000,
+        requireInteraction: false
+    },
+
+    // 获取设置
+    get: function (key) {
+        const settings = JSON.parse(localStorage.getItem('notification-settings') || '{}');
+        return settings[key] !== undefined ? settings[key] : this.defaults[key];
+    },
+
+    // 设置
+    set: function (key, value) {
+        const settings = JSON.parse(localStorage.getItem('notification-settings') || '{}');
+        settings[key] = value;
+        localStorage.setItem('notification-settings', JSON.stringify(settings));
+    },
+
+    // 获取所有设置
+    getAll: function () {
+        const settings = JSON.parse(localStorage.getItem('notification-settings') || '{}');
+        return { ...this.defaults, ...settings };
+    },
+
+    // 重置设置
+    reset: function () {
+        localStorage.removeItem('notification-settings');
+    }
+};
+
+/**
+ * 增强的发送通知函数，支持设置控制
+ */
+function sendNotificationWithSettings(title, body, type = 'info', options = {}) {
+    // 检查通知是否启用
+    if (!NotificationSettings.get('enabled')) {
+        return null;
+    }
+
+    // 检查特定类型通知是否启用
+    const typeKey = `show${type.charAt(0).toUpperCase() + type.slice(1)}`;
+    if (!NotificationSettings.get(typeKey)) {
+        return null;
+    }
+
+    // 应用用户设置
+    const userSettings = {
+        autoClose: NotificationSettings.get('autoClose'),
+        duration: NotificationSettings.get('duration'),
+        requireInteraction: NotificationSettings.get('requireInteraction'),
+        ...options
+    };
+
+    // 根据类型发送对应通知
+    switch (type) {
+        case 'success':
+            return sendSuccessNotification(title, body, userSettings);
+        case 'error':
+            return sendErrorNotification(title, body, userSettings);
+        case 'warning':
+            return sendWarningNotification(title, body, userSettings);
+        case 'info':
+            return sendInfoNotification(title, body, userSettings);
+        default:
+            return sendNotification(title, body, userSettings);
+    }
+}
+
+/**
+ * 创建通知设置面板
+ */
+function createNotificationSettingsPanel() {
+    const settings = NotificationSettings.getAll();
+
+    // 移除已存在的面板和实例
+    const existingModalEl = document.getElementById('notificationSettingsModal');
+    if (existingModalEl) {
+        const modalInstance = bootstrap.Modal.getInstance(existingModalEl);
+        if (modalInstance) {
+            modalInstance.dispose();
+        }
+        existingModalEl.remove();
+    }
+
+    const panelHtml = `
+        <div class="modal fade" id="notificationSettingsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">
+                            <i class="bi bi-bell"></i> 通知设置
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="enableNotifications" ${settings.enabled ? 'checked' : ''}>
+                                <label class="form-check-label" for="enableNotifications">
+                                    启用浏览器通知
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <hr>
+                        
+                        <div class="mb-3">
+                            <label class="form-label">通知类型</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showSuccess" ${settings.showSuccess ? 'checked' : ''}>
+                                <label class="form-check-label" for="showSuccess">
+                                    <span class="text-success">✓</span> 成功通知
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showError" ${settings.showError ? 'checked' : ''}>
+                                <label class="form-check-label" for="showError">
+                                    <span class="text-danger">✗</span> 错误通知
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showWarning" ${settings.showWarning ? 'checked' : ''}>
+                                <label class="form-check-label" for="showWarning">
+                                    <span class="text-warning">⚠</span> 警告通知
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="showInfo" ${settings.showInfo ? 'checked' : ''}>
+                                <label class="form-check-label" for="showInfo">
+                                    <span class="text-info">ℹ</span> 信息通知
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="notificationDuration" class="form-label">自动关闭时间</label>
+                            <div class="input-group">
+                                <input type="range" class="form-range" id="notificationDuration" 
+                                       min="2000" max="10000" step="1000" value="${settings.duration}">
+                                <span class="input-group-text" id="durationDisplay">${settings.duration / 1000}秒</span>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="requireInteraction" ${settings.requireInteraction ? 'checked' : ''}>
+                                <label class="form-check-label" for="requireInteraction">
+                                    重要通知需要用户操作才能关闭
+                                </label>
+                            </div>
+                        </div>
+                        
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle"></i>
+                            <small>通知功能需要浏览器权限，如果没有权限请点击下方按钮申请。</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-primary" onclick="testNotification()">
+                            <i class="bi bi-bell"></i> 测试通知
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="resetNotificationSettings()">
+                            <i class="bi bi-arrow-clockwise"></i> 重置
+                        </button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                        <button type="button" class="btn btn-primary" onclick="saveNotificationSettings()">
+                            <i class="bi bi-check"></i> 保存
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // 添加新面板
+    document.body.insertAdjacentHTML('beforeend', panelHtml);
+
+    // 绑定事件
+    const durationSlider = document.getElementById('notificationDuration');
+    const durationDisplay = document.getElementById('durationDisplay');
+
+    durationSlider.addEventListener('input', function () {
+        durationDisplay.textContent = `${this.value / 1000}秒`;
+    });
+}
+
+/**
+ * 保存通知设置
+ */
+function saveNotificationSettings() {
+    const settings = {
+        enabled: document.getElementById('enableNotifications').checked,
+        showSuccess: document.getElementById('showSuccess').checked,
+        showError: document.getElementById('showError').checked,
+        showWarning: document.getElementById('showWarning').checked,
+        showInfo: document.getElementById('showInfo').checked,
+        duration: parseInt(document.getElementById('notificationDuration').value),
+        requireInteraction: document.getElementById('requireInteraction').checked
+    };
+
+    // 保存设置
+    Object.keys(settings).forEach(key => {
+        NotificationSettings.set(key, settings[key]);
+    });
+
+    // 关闭面板
+    const modal = bootstrap.Modal.getInstance(document.getElementById('notificationSettingsModal'));
+    modal.hide();
+
+    showMessage('通知设置已保存', 'success', 2000);
+}
+
+/**
+ * 重置通知设置
+ */
+function resetNotificationSettings() {
+    if (confirm('确定要重置所有通知设置吗？')) {
+        NotificationSettings.reset();
+
+        // 关闭并重新创建面板
+        const modal = bootstrap.Modal.getInstance(document.getElementById('notificationSettingsModal'));
+        modal.hide();
+
+        setTimeout(() => {
+            createNotificationSettingsPanel();
+            const newModal = new bootstrap.Modal(document.getElementById('notificationSettingsModal'));
+            newModal.show();
+        }, 300);
+
+        showMessage('通知设置已重置', 'success', 2000);
+    }
+}
+
+/**
+ * 测试通知
+ */
+function testNotification() {
+    const types = ['success', 'info', 'warning', 'error'];
+    const messages = [
+        { type: 'success', title: '测试成功通知', body: '这是一个成功通知的示例' },
+        { type: 'info', title: '测试信息通知', body: '这是一个信息通知的示例' },
+        { type: 'warning', title: '测试警告通知', body: '这是一个警告通知的示例' },
+        { type: 'error', title: '测试错误通知', body: '这是一个错误通知的示例' }
+    ];
+
+    messages.forEach((msg, index) => {
+        setTimeout(() => {
+            sendNotificationWithSettings(msg.title, msg.body, msg.type);
+        }, index * 1000);
+    });
+}
+
 // 导出函数供其他脚本使用
 window.BilibiliTool = {
     showMessage,
@@ -366,5 +796,19 @@ window.BilibiliTool = {
     throttle,
     getUrlParameter,
     setUrlParameter,
-    scrollToElement
+    scrollToElement,
+    // 通知相关函数
+    requestNotificationPermission,
+    sendNotification,
+    sendSuccessNotification,
+    sendErrorNotification,
+    sendWarningNotification,
+    sendInfoNotification,
+    sendProgressNotification,
+    sendNotificationWithSettings,
+    NotificationSettings,
+    createNotificationSettingsPanel,
+    saveNotificationSettings,
+    resetNotificationSettings,
+    testNotification
 }; 

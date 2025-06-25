@@ -82,6 +82,14 @@ async function startOneClickUpdate(mode = 'standard') {
         if (response.ok) {
             showMessage(`一键更新任务已启动！正在后台执行（${mode === 'conservative' ? '保守' : '标准'}模式），预计需要5-10分钟。`, 'success');
 
+            // 发送启动通知
+            if (window.BilibiliTool && window.BilibiliTool.sendInfoNotification) {
+                window.BilibiliTool.sendInfoNotification(
+                    '一键更新已启动',
+                    `${mode === 'conservative' ? '保守' : '标准'}模式执行中，预计需要5-10分钟`
+                );
+            }
+
             // 初始化进度界面
             initializeProgressInterface();
             startProgressPolling(result.task_id);
@@ -93,7 +101,11 @@ async function startOneClickUpdate(mode = 'standard') {
         hideFullScreenProgress();
         console.error('一键更新失败:', error);
         showMessage('一键更新失败: ' + error.message, 'danger');
-        sendNotification('一键更新失败', error.message);
+
+        // 发送错误通知
+        if (window.BilibiliTool && window.BilibiliTool.sendErrorNotification) {
+            window.BilibiliTool.sendErrorNotification('一键更新失败', error.message);
+        }
     }
 }
 
@@ -610,6 +622,15 @@ async function startSync() {
     } catch (error) {
         console.error('同步失败:', error);
         showMessage('同步失败: ' + error.message, 'danger');
+
+        // 发送同步失败通知
+        if (window.BilibiliTool && window.BilibiliTool.sendErrorNotification) {
+            window.BilibiliTool.sendErrorNotification(
+                '同步失败',
+                error.message,
+                { requireInteraction: true }
+            );
+        }
 
         // 隐藏模态框
         const syncModal = bootstrap.Modal.getInstance(document.getElementById('syncModal'));
@@ -1202,10 +1223,7 @@ function initializeProgressInterface() {
     // 初始化自动滚动状态
     window.autoScroll = true;
 
-    // 请求通知权限
-    if ('Notification' in window && Notification.permission === 'default') {
-        Notification.requestPermission();
-    }
+    // 通知权限在common.js中已自动请求
 }
 
 /**
@@ -1375,11 +1393,12 @@ function handleTaskComplete(data) {
         }
 
         // 显示通知
-        if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('哔哩哔哩一键更新', {
-                body: '所有数据已同步完成！',
-                icon: '/static/img/default-avatar.png'
-            });
+        if (window.BilibiliTool && window.BilibiliTool.sendSuccessNotification) {
+            window.BilibiliTool.sendSuccessNotification(
+                '一键更新完成',
+                '所有数据已同步完成！',
+                { requireInteraction: true }
+            );
         }
 
         showMessage('一键更新完成！所有数据已同步。', 'success');
@@ -1390,6 +1409,15 @@ function handleTaskComplete(data) {
 
         addLogEntry('系统', `任务执行失败: ${overall.error || '未知错误'}`);
         showMessage('一键更新失败，请查看日志了解详情。', 'danger');
+
+        // 发送失败通知
+        if (window.BilibiliTool && window.BilibiliTool.sendErrorNotification) {
+            window.BilibiliTool.sendErrorNotification(
+                '一键更新失败',
+                overall.error || '未知错误，请查看日志',
+                { requireInteraction: true }
+            );
+        }
     }
 
     // 显示关闭按钮

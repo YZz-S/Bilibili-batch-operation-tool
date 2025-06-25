@@ -1646,36 +1646,15 @@
     // 全局变量存储同步控制器
     let syncController = null;
 
-    /**
-     * 请求浏览器通知权限
-     */
-    async function requestNotificationPermission() {
-        if ("Notification" in window) {
-            if (Notification.permission === "default") {
-                await Notification.requestPermission();
-            }
-        }
-    }
+    // 通知权限请求现在由common.js自动处理
 
-    /**
-     * 发送浏览器通知
-     */
-    function sendNotification(title, body, options = {}) {
-        if ("Notification" in window && Notification.permission === "granted") {
-            new Notification(title, {
-                body: body,
-                icon: '/static/img/default-avatar.png',
-                ...options
-            });
-        }
-    }
+    // 通知功能现在由common.js中的BilibiliTool统一提供
 
     /**
      * 同步真实用户统计数据
      */
     async function syncRealUserStats(limit = 0) {
-        // 请求通知权限
-        await requestNotificationPermission();
+        // 通知权限在页面加载时已自动请求
 
         const limitText = limit === 0 ? '全部' : limit;
         if (!confirm(`确定要同步 ${limitText} 个用户的真实数据吗？这将从B站API获取准确的视频数量和最后更新时间，但可能需要较长时间。`)) {
@@ -1755,11 +1734,21 @@
             if (error.name === 'AbortError') {
                 console.error('同步被取消或超时');
                 showMessage('⏰ 同步已取消或超时', 'warning');
-                sendNotification('数据同步取消', '同步操作已被取消或超时');
+                if (window.BilibiliTool && window.BilibiliTool.sendWarningNotification) {
+                    window.BilibiliTool.sendWarningNotification(
+                        '数据同步取消',
+                        '同步操作已被取消或超时'
+                    );
+                }
             } else {
                 console.error('数据同步失败:', error);
                 showMessage('❌ 数据同步失败: ' + error.message, 'danger');
-                sendNotification('数据同步失败', error.message);
+                if (window.BilibiliTool && window.BilibiliTool.sendErrorNotification) {
+                    window.BilibiliTool.sendErrorNotification(
+                        '数据同步失败',
+                        error.message
+                    );
+                }
             }
         } finally {
             syncController = null;
@@ -2006,7 +1995,12 @@
                 message += `\n📝 详情：${result.message}`;
             }
 
-            sendNotification('数据同步超时', `已处理 ${result.processed_users || 0}/${result.total_users || 0} 个用户`);
+            if (window.BilibiliTool && window.BilibiliTool.sendWarningNotification) {
+                window.BilibiliTool.sendWarningNotification(
+                    '数据同步超时',
+                    `已处理 ${result.processed_users || 0}/${result.total_users || 0} 个用户`
+                );
+            }
 
             // 部分成功时仍然刷新数据
             if (result.updated_count > 0) {
@@ -2022,7 +2016,12 @@
                 message += `\n📝 详情：${result.message}`;
             }
 
-            sendNotification('数据同步停止', `已处理 ${result.processed_users || 0}/${result.total_users || 0} 个用户`);
+            if (window.BilibiliTool && window.BilibiliTool.sendWarningNotification) {
+                window.BilibiliTool.sendWarningNotification(
+                    '数据同步停止',
+                    `已处理 ${result.processed_users || 0}/${result.total_users || 0} 个用户`
+                );
+            }
 
             // 部分成功时仍然刷新数据
             if (result.updated_count > 0) {
@@ -2039,7 +2038,12 @@
             }
 
             // 发送浏览器通知
-            sendNotification('数据同步完成', `成功更新了 ${result.updated_count} 个用户的真实数据`);
+            if (window.BilibiliTool && window.BilibiliTool.sendSuccessNotification) {
+                window.BilibiliTool.sendSuccessNotification(
+                    '数据同步完成',
+                    `成功更新了 ${result.updated_count} 个用户的真实数据`
+                );
+            }
 
             // 隐藏数据说明警告
             const warningAlert = document.querySelector('.alert-warning');
@@ -2056,7 +2060,12 @@
             type = 'warning';
 
             // 发送浏览器通知
-            sendNotification('数据同步完成', `同步完成，但没有成功更新数据`);
+            if (window.BilibiliTool && window.BilibiliTool.sendWarningNotification) {
+                window.BilibiliTool.sendWarningNotification(
+                    '数据同步完成',
+                    '同步完成，但没有成功更新数据'
+                );
+            }
         }
 
         // 检查是否遇到风控限制（向后兼容）
@@ -2220,7 +2229,12 @@
                         showMessage('一键更新任务应该已完成！请检查最新的数据分析结果。', 'success');
 
                         // 发送浏览器通知
-                        sendNotification('一键更新完成', '所有信息已更新，请查看最新的分析结果');
+                        if (window.BilibiliTool && window.BilibiliTool.sendSuccessNotification) {
+                            window.BilibiliTool.sendSuccessNotification(
+                                '一键更新完成',
+                                '所有信息已更新，请查看最新的分析结果'
+                            );
+                        }
                     }
                 }, 30000); // 每30秒刷新一次
 
@@ -2239,7 +2253,12 @@
             hideFullscreenLoader();
             console.error('一键更新失败:', error);
             showMessage('一键更新失败: ' + error.message, 'danger');
-            sendNotification('一键更新失败', error.message);
+            if (window.BilibiliTool && window.BilibiliTool.sendErrorNotification) {
+                window.BilibiliTool.sendErrorNotification(
+                    '一键更新失败',
+                    error.message
+                );
+            }
         }
     }
 

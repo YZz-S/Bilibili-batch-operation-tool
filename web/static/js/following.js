@@ -970,15 +970,18 @@ async function oneClickUpdate() {
         if (response.ok && result.task_id) {
             showMessage('一键更新任务已启动，正在后台执行...', 'success');
 
+            // 发送启动通知
+            if (window.BilibiliTool && window.BilibiliTool.sendInfoNotification) {
+                window.BilibiliTool.sendInfoNotification(
+                    '一键更新已启动',
+                    '关注列表数据正在后台同步，可能需要较长时间'
+                );
+            }
+
             // 显示详细进度提示
             setTimeout(() => {
                 showMessage('一键更新正在进行中，这可能需要很长时间，请耐心等待...', 'info');
             }, 3000);
-
-            // 请求通知权限
-            if ('Notification' in window && Notification.permission === 'default') {
-                Notification.requestPermission();
-            }
 
             // 定时刷新数据（每60秒检查一次）
             let refreshCount = 0;
@@ -1014,11 +1017,12 @@ async function oneClickUpdate() {
                             await loadCategories();
 
                             // 显示通知
-                            if ('Notification' in window && Notification.permission === 'granted') {
-                                new Notification('哔哩哔哩一键更新', {
-                                    body: '关注列表数据已全部同步完成！',
-                                    icon: '/static/img/default-avatar.png'
-                                });
+                            if (window.BilibiliTool && window.BilibiliTool.sendSuccessNotification) {
+                                window.BilibiliTool.sendSuccessNotification(
+                                    '一键更新完成',
+                                    '关注列表数据已全部同步完成！',
+                                    { requireInteraction: true }
+                                );
                             }
                         } else if (statusData.overall.status === 'failed') {
                             clearInterval(refreshInterval);
