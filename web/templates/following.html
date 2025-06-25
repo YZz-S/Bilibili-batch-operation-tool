@@ -168,6 +168,28 @@
         animation: spin 1s linear infinite;
     }
 
+    .explanation-card {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        .explanation-card {
+            background-color: #2d3748;
+            border-color: #4a5568;
+            color: #e9ecef;
+        }
+
+        .explanation-card .card-text,
+        .explanation-card ul li {
+            color: #cbd5e0;
+        }
+
+        .explanation-card strong {
+            color: #fff;
+        }
+    }
+
     @keyframes spin {
         from {
             transform: rotate(0deg);
@@ -208,6 +230,36 @@
             <button class="btn btn-secondary" onclick="testAvatarLinks()" title="测试头像点击功能">
                 <i class="fas fa-bug"></i> 测试头像链接
             </button>
+        </div>
+    </div>
+
+    <!-- 说明区域 -->
+    <div class="mb-4">
+        <a class="btn btn-outline-info btn-sm" data-bs-toggle="collapse" href="#explanation" role="button"
+            aria-expanded="false" aria-controls="explanation">
+            <i class="fas fa-info-circle"></i> 查看说明：自动分类、建议清理原则
+        </a>
+        <div class="collapse" id="explanation">
+            <div class="card card-body mt-2 explanation-card">
+                <h5 class="card-title"><i class="fas fa-magic text-success"></i> 自动分类原理</h5>
+                <p class="card-text">
+                    自动分类功能通过分析UP主的<strong>视频标签、投稿分区、个人签名</strong>等信息，并结合您的<strong>互动行为（未来功能）</strong>，智能地将您关注的UP主划分到不同的类别中，例如"游戏"、"生活"、"知识"等。这有助于您更好地管理和发现感兴趣的内容。
+                </p>
+                <ul>
+                    <li><strong>数据来源：</strong> 主要依赖于UP主公开的个人信息和视频信息。</li>
+                    <li><strong>分类算法：</strong> 基于关键词匹配和简单的规则模型，持续优化中。</li>
+                    <li><strong>隐私保护：</strong> 本功能仅分析公开数据，不会获取您的任何隐私信息。</li>
+                </ul>
+                <hr>
+                <h5 class="card-title"><i class="fas fa-heart-broken text-warning"></i> 建议清理原则</h5>
+                <p class="card-text">"建议清理"会识别出一些可能不再活跃或您可能不再感兴趣的UP主，帮助您优化关注列表。判断依据如下：</p>
+                <ul>
+                    <li><strong>长期未更新：</strong> UP主在过去很长一段时间内（例如超过180天）没有发布新视频。</li>
+                    <li><strong>账号状态异常：</strong> 账号被封禁、已注销，或无法访问。</li>
+                    <li><strong>低互动UP主（未来功能）：</strong> 您关注了很久但几乎没有观看或互动过的UP主。</li>
+                </ul>
+                <p class="text-muted small">请注意：这些只是建议，最终操作权在您手中。您可以根据自己的判断决定是否取关。</p>
+            </div>
         </div>
     </div>
 

@@ -218,6 +218,40 @@
         .spinner-border.text-primary {
             border-top-color: #63b3ed;
         }
+
+        #detailedHelp p,
+        #detailedHelp ul li {
+            color: #cbd5e0 !important;
+        }
+
+        #detailedHelp strong {
+            color: #fff !important;
+        }
+
+        .explanation-card-inner {
+            background-color: #2d3748;
+            border-color: #4a5568;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .explanation-card-inner {
+                background-color: #2d3748 !important;
+                border-color: #4a5568 !important;
+            }
+
+            .explanation-card-inner h6 {
+                color: #e9ecef !important;
+            }
+
+            .explanation-card-inner p,
+            .explanation-card-inner ul li {
+                color: #cbd5e0 !important;
+            }
+
+            .explanation-card-inner strong {
+                color: #fff !important;
+            }
+        }
     }
 
     /* 全屏加载动画样式 */
@@ -297,21 +331,12 @@
     <!-- 页面标题 -->
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
-            <h2><i class="fas fa-chart-line"></i> 数据分析</h2>
-            <p class="text-muted">分析您的关注列表，发现有价值的洞察</p>
+            <h2><i class="fas fa-chart-pie"></i> 数据分析</h2>
+            <p class="text-muted">深入了解您的关注列表，发现潜在的优化机会</p>
         </div>
         <div>
-            <button class="btn btn-info me-2" onclick="oneClickUpdate()">
-                <i class="fas fa-rocket"></i> 一键更新所有信息
-            </button>
-            <button class="btn btn-success me-2" onclick="updateCategories()">
-                <i class="fas fa-tags"></i> 更新分类
-            </button>
-            <button class="btn btn-primary me-2" onclick="refreshAnalysis()">
-                <i class="fas fa-sync-alt"></i> 刷新分析
-            </button>
-            <button class="btn btn-outline-info" onclick="showDebugInfo()">
-                <i class="fas fa-bug"></i> 调试信息
+            <button id="refresh-button" class="btn btn-success" onclick="refreshAnalysisData()">
+                <i class="fas fa-sync-alt"></i> 刷新数据
             </button>
         </div>
     </div>
@@ -331,7 +356,7 @@
                     <div class="row">
                         <div class="col-md-6">
                             <ul class="list-unstyled mb-0" style="font-size: 0.85rem;">
-                                <li><i class="fas fa-check text-success"></i> 智能分类识别12个主要领域</li>
+                                <li><i class="fas fa-check text-success"></i> 智能分类识别主要领域</li>
                                 <li><i class="fas fa-check text-success"></i> 多维度活跃度综合评估</li>
                             </ul>
                         </div>
@@ -345,41 +370,97 @@
                 </div>
                 <button class="btn btn-outline-primary btn-sm ms-3" data-bs-toggle="collapse"
                     data-bs-target="#detailedHelp" aria-expanded="false">
-                    <i class="fas fa-question-circle"></i> 详细说明
+                    <i class="fas fa-question-circle"></i> 查看原则与说明
                 </button>
             </div>
 
             <!-- 详细说明折叠区域 -->
             <div class="collapse mt-3" id="detailedHelp">
                 <hr>
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6><i class="fas fa-tags text-info"></i> 智能分类</h6>
-                        <p style="font-size: 0.8rem; color: #6c757d;">
-                            系统会分析用户名和个人签名中的关键词，自动将关注用户归类到游戏、科技、知识、生活、娱乐、美食、时尚、汽车、财经、体育、动漫、音乐等领域。分类准确率超过85%。
-                        </p>
+                <div class="card card-body explanation-card-inner" style="border: none;">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-lightbulb text-primary"></i> 智能洞察原则</h6>
+                            <p style="font-size: 0.8rem;">
+                                "智能洞察"旨在通过分析您关注列表的数据，为您提供有价值的见解和建议。我们遵循以下原则：<br>
+                                <strong>数据驱动：</strong> 所有洞察均基于您关注列表的客观数据。<br>
+                                <strong>关注价值：</strong> 帮助您识别高价值和可能失去关注价值的UP主。<br>
+                                <strong>用户为本：</strong> 建议仅供参考，决策权在您手中。<br>
+                                <strong>隐私安全：</strong> 仅分析公开信息，绝不触及您的个人隐私。
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-tags text-info"></i> 智能分类原则</h6>
+                            <p style="font-size: 0.8rem;">
+                                系统会分析UP主的<strong>视频标签、投稿分区、个人签名</strong>等信息，自动将您关注的UP主归类到不同领域。这有助于您更好地管理和发现感兴趣的内容。
+                            </p>
+                        </div>
                     </div>
-                    <div class="col-md-6">
-                        <h6><i class="fas fa-chart-pulse text-warning"></i> 活跃度评估</h6>
-                        <p style="font-size: 0.8rem; color: #6c757d;">
-                            综合考虑粉丝数量、视频总数、最后发布时间、总播放量等指标，计算出0-1之间的活跃度分数，帮助识别真正活跃的内容创作者。
-                        </p>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-chart-pulse text-warning"></i> 活跃度评估</h6>
+                            <p style="font-size: 0.8rem;">
+                                综合考虑粉丝数量、视频总数、最后发布时间、总播放量等指标，计算出0-1之间的活跃度分数，帮助识别真正活跃的内容创作者。
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-user-clock text-danger"></i> 清理建议原则</h6>
+                            <p style="font-size: 0.8rem; color: #6c757d;">
+                                主要基于<strong>长期未更新</strong>（如超过180天）、<strong>账号状态异常</strong>（如封禁/注销）等条件识别您可能不再感兴趣的UP主。这些只是建议，您可以根据自己的判断决定是否取关。
+                            </p>
+                        </div>
+                    </div>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <h6><i class="fas fa-shield-alt text-success"></i> 安全保障</h6>
+                            <p style="font-size: 0.8rem; color: #6c757d;">
+                                所有操作都提供详细说明和确认提示，优先使用B站官方API数据，确保分析结果的可靠性和操作的安全性。
+                            </p>
+                        </div>
                     </div>
                 </div>
-                <div class="row">
-                    <div class="col-md-6">
-                        <h6><i class="fas fa-user-clock text-danger"></i> 不活跃检测</h6>
-                        <p style="font-size: 0.8rem; color: #6c757d;">
-                            主要基于30天未发新视频的时间标准，辅以活跃度和内容产出量评估，确保检测结果的准确性和实用性。
-                        </p>
-                    </div>
-                    <div class="col-md-6">
-                        <h6><i class="fas fa-shield-alt text-success"></i> 安全保障</h6>
-                        <p style="font-size: 0.8rem; color: #6c757d;">
-                            所有操作都提供详细说明和确认提示，优先使用B站官方API数据，确保分析结果的可靠性和操作的安全性。
-                        </p>
-                    </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载动画 -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="d-flex flex-column align-items-center">
+            <div class="loader-spinner">
+                <div class="spinner-border text-primary" style="width: 4rem; height: 4rem;" role="status">
+                    <span class="visually-hidden">Loading...</span>
                 </div>
+            </div>
+            <h4 class="loader-title mt-3">正在同步真实数据...</h4>
+            <p class="loader-subtitle" id="loaderSubtitle">正在从B站API获取准确的用户统计信息</p>
+            <div class="progress mt-3" style="width: 300px;">
+                <div id="syncProgress" class="progress-bar progress-bar-striped progress-bar-animated"
+                    role="progressbar" style="width: 0%"></div>
+            </div>
+            <p class="loader-info mt-2" id="loaderInfo">请耐心等待，这可能需要几分钟...</p>
+            <button class="btn btn-outline-light btn-sm mt-3" onclick="cancelSync()">
+                <i class="fas fa-times"></i> 取消同步
+            </button>
+        </div>
+    </div>
+
+    <!-- 说明区域 -->
+    <div class="mb-4">
+        <a class="btn btn-outline-info btn-sm" data-bs-toggle="collapse" href="#explanation-analysis" role="button"
+            aria-expanded="false" aria-controls="explanation-analysis">
+            <i class="fas fa-info-circle"></i> 查看说明：智能洞察原则
+        </a>
+        <div class="collapse" id="explanation-analysis">
+            <div class="card card-body mt-2 bg-light">
+                <h5 class="card-title"><i class="fas fa-lightbulb text-primary"></i> 智能洞察原则</h5>
+                <p class="card-text">"智能洞察"旨在通过分析您关注列表的数据，为您提供有价值的见解和建议。我们遵循以下原则：</p>
+                <ul>
+                    <li><strong>数据驱动：</strong> 所有洞察均基于您关注列表的客观数据，如UP主的活跃度、粉丝数、视频发布频率等。</li>
+                    <li><strong>关注价值：</strong> 我们帮助您识别高价值UP主（例如，持续创作高质量内容）和可能失去关注价值的UP主（例如，长期不活跃）。</li>
+                    <li><strong>用户为本：</strong> 我们提供的数据和建议仅供参考，最终决策权完全在您手中。我们的目标是辅助您，而非代替您做决定。</li>
+                    <li><strong>隐私安全：</strong> 分析过程仅涉及UP主的公开信息和您的关注关系，绝不触及您的个人隐私。</li>
+                </ul>
+                <p class="text-muted small">此功能会随着数据的积累和算法的优化，为您提供越来越精准的洞察。</p>
             </div>
         </div>
     </div>
