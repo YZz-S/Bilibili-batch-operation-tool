@@ -32,6 +32,85 @@ function setupEventListeners() {
 }
 
 /**
+ * 显示同步选项模态框
+ */
+function showSyncOptionsModal() {
+    const modal = new bootstrap.Modal(document.getElementById('syncOptionsModal'));
+    modal.show();
+}
+
+/**
+ * 显示快速同步模态框
+ */
+function showQuickSyncModal() {
+    const modal = new bootstrap.Modal(document.getElementById('quickSyncModal'));
+    modal.show();
+}
+
+/**
+ * 启动一键更新（带模式选择）
+ */
+async function startOneClickUpdate(mode = 'standard') {
+    // 关闭模态框
+    const modal = bootstrap.Modal.getInstance(document.getElementById('syncOptionsModal'));
+    if (modal) {
+        modal.hide();
+    }
+
+    if (!confirm(`确定要执行一键更新吗？将使用${mode === 'conservative' ? '保守' : '标准'}模式，整个过程可能需要5-10分钟。`)) {
+        return;
+    }
+
+    try {
+        // 显示全屏进度界面
+        showFullScreenProgress();
+
+        showMessage(`正在启动一键更新任务（${mode === 'conservative' ? '保守' : '标准'}模式）...`, 'info');
+
+        const response = await fetch('/api/bilibili/one-click-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                mode: mode
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            showMessage(`一键更新任务已启动！正在后台执行（${mode === 'conservative' ? '保守' : '标准'}模式），预计需要5-10分钟。`, 'success');
+
+            // 初始化进度界面
+            initializeProgressInterface();
+            startProgressPolling(result.task_id);
+
+        } else {
+            throw new Error(result.detail || '启动一键更新失败');
+        }
+    } catch (error) {
+        hideFullScreenProgress();
+        console.error('一键更新失败:', error);
+        showMessage('一键更新失败: ' + error.message, 'danger');
+        sendNotification('一键更新失败', error.message);
+    }
+}
+
+/**
+ * 启动标准同步
+ */
+async function startStandardSync() {
+    // 关闭模态框
+    const modal = bootstrap.Modal.getInstance(document.getElementById('quickSyncModal'));
+    if (modal) {
+        modal.hide();
+    }
+
+    await startSync();
+}
+
+/**
  * 加载数据更新时间信息
  */
 async function loadLastUpdatedInfo() {
@@ -43,43 +122,67 @@ async function loadLastUpdatedInfo() {
             const lastUpdatedAlert = document.getElementById('lastUpdatedAlert');
             const lastUpdatedText = document.getElementById('lastUpdatedText');
 
-            if (data.time_info.last_updated) {
-                const updateTime = new Date(data.time_info.last_updated * 1000);
-                const now = new Date();
-                const daysDiff = Math.floor((now - updateTime) / (1000 * 60 * 60 * 24));
+            if (data.time_info.last_updated && data.time_info.last_updated !== null) {
+                try {
+                    // 处理时间戳，可能是秒或毫秒，也可能是ISO字符串
+                    let updateTime;
+                    const lastUpdated = data.time_info.last_updated;
 
-                let alertClass = 'alert-info';
-                let bgGradient = 'linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%)';
-                let message = '';
+                    if (typeof lastUpdated === 'string') {
+                        // ISO字符串格式
+                        updateTime = new Date(lastUpdated);
+                    } else if (typeof lastUpdated === 'number') {
+                        // 时间戳格式，判断是秒还是毫秒
+                        if (lastUpdated > 10000000000) {
+                            // 毫秒时间戳
+                            updateTime = new Date(lastUpdated);
+                        } else {
+                            // 秒时间戳
+                            updateTime = new Date(lastUpdated * 1000);
+                        }
+                    } else {
+                        throw new Error('Invalid timestamp format');
+                    }
 
-                if (daysDiff === 0) {
-                    message = `统计数据已更新至今日 ${updateTime.toLocaleString('zh-CN')}`;
-                    alertClass = 'alert-success';
-                    bgGradient = 'linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%)';
-                } else if (daysDiff <= 3) {
-                    message = `统计数据最后更新于 ${daysDiff} 天前 (${updateTime.toLocaleString('zh-CN')})`;
-                    alertClass = 'alert-info';
-                    bgGradient = 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)';
-                } else if (daysDiff <= 7) {
-                    message = `统计数据已过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，建议重新同步`;
-                    alertClass = 'alert-warning';
-                    bgGradient = 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)';
-                } else {
-                    message = `统计数据严重过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，强烈建议立即同步`;
-                    alertClass = 'alert-danger';
-                    bgGradient = 'linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%)';
+                    // 检查日期是否有效
+                    if (isNaN(updateTime.getTime())) {
+                        throw new Error('Invalid date');
+                    }
+
+                    const now = new Date();
+                    const daysDiff = Math.floor((now - updateTime) / (1000 * 60 * 60 * 24));
+
+                    let alertClass = 'alert-info';
+                    let message = '';
+
+                    if (daysDiff === 0) {
+                        message = `统计数据已更新至今日 ${updateTime.toLocaleString('zh-CN')}`;
+                        alertClass = 'alert-success';
+                    } else if (daysDiff <= 3) {
+                        message = `统计数据最后更新于 ${daysDiff} 天前 (${updateTime.toLocaleString('zh-CN')})`;
+                        alertClass = 'alert-info';
+                    } else if (daysDiff <= 7) {
+                        message = `统计数据已过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，建议重新同步`;
+                        alertClass = 'alert-warning';
+                    } else {
+                        message = `统计数据严重过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，强烈建议立即同步`;
+                        alertClass = 'alert-danger';
+                    }
+
+                    lastUpdatedText.textContent = message;
+
+                    // 更新样式
+                    lastUpdatedAlert.className = `alert data-status-alert ${alertClass}`;
+                    lastUpdatedAlert.style.display = 'block';
+                } catch (error) {
+                    console.error('时间解析错误:', error, 'lastUpdated:', data.time_info.last_updated);
+                    lastUpdatedText.textContent = '暂无统计数据，请先执行"同步真实数据"功能获取准确的用户统计信息';
+                    lastUpdatedAlert.className = 'alert data-status-alert alert-warning';
+                    lastUpdatedAlert.style.display = 'block';
                 }
-
-                lastUpdatedText.textContent = message;
-
-                // 更新样式
-                lastUpdatedAlert.className = `alert ${alertClass}`;
-                lastUpdatedAlert.style.background = bgGradient;
-                lastUpdatedAlert.style.display = 'block';
             } else {
                 lastUpdatedText.textContent = '暂无统计数据，请先执行"同步真实数据"功能获取准确的用户统计信息';
-                lastUpdatedAlert.className = 'alert alert-warning';
-                lastUpdatedAlert.style.background = 'linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%)';
+                lastUpdatedAlert.className = 'alert data-status-alert alert-warning';
                 lastUpdatedAlert.style.display = 'block';
             }
         }
@@ -752,9 +855,9 @@ async function batchUnfollowInactive() {
 }
 
 /**
- * 一键更新所有信息
+ * 一键更新所有信息（原有版本，保留备用）
  */
-async function oneClickUpdate() {
+async function oneClickUpdateLegacy() {
     if (!isOnline) {
         showMessage('请先在设置页面配置哔哩哔哩Cookie', 'warning');
         return;
@@ -828,7 +931,7 @@ async function oneClickUpdate() {
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                        <button type="button" class="btn btn-primary" onclick="startOneClickUpdate()">
+                        <button type="button" class="btn btn-primary" onclick="startOneClickUpdateLegacy()">
                             <i class="bi bi-rocket-takeoff"></i>
                             开始更新
                         </button>
@@ -853,9 +956,9 @@ async function oneClickUpdate() {
 }
 
 /**
- * 开始一键更新
+ * 开始一键更新（原有版本，保留备用）
  */
-async function startOneClickUpdate() {
+async function startOneClickUpdateLegacy() {
     try {
         // 关闭确认对话框
         const confirmModal = bootstrap.Modal.getInstance(document.getElementById('oneClickUpdateModal'));
@@ -1407,4 +1510,754 @@ function hideFullScreenProgress() {
 function hideOneClickUpdateProgress() {
     // 兼容旧代码
     hideFullScreenProgress();
-} 
+}
+
+// =============== 保守同步功能 ===============
+
+/**
+ * 显示保守同步对话框
+ */
+function showConservativeSyncDialog() {
+    const modal = new bootstrap.Modal(document.getElementById('conservativeSyncModal'));
+    modal.show();
+}
+
+/**
+ * 显示超级保守同步对话框
+ */
+function showUltraConservativeSyncDialog() {
+    const modal = new bootstrap.Modal(document.getElementById('ultraConservativeSyncModal'));
+    modal.show();
+}
+
+/**
+ * 开始保守同步
+ */
+async function startConservativeSync() {
+    const startPos = document.getElementById('conservativeStartPos').value;
+    const count = document.getElementById('conservativeCount').value;
+    const confirmed = document.getElementById('conservativeConfirm').checked;
+
+    if (!confirmed) {
+        showMessage('请确认你已了解保守模式的特点', 'warning');
+        return;
+    }
+
+    const startPosNum = parseInt(startPos) - 1; // 转换为0基索引
+    const countNum = count ? parseInt(count) : null;
+
+    try {
+        showMessage('正在启动保守同步...', 'info');
+
+        const params = new URLSearchParams();
+        params.append('start_pos', startPosNum);
+        if (countNum) {
+            params.append('count', countNum);
+        }
+
+        const response = await fetch('/api/bilibili/sync-user-stats-conservative', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: params
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // 隐藏设置对话框
+            const settingsModal = bootstrap.Modal.getInstance(document.getElementById('conservativeSyncModal'));
+            settingsModal.hide();
+
+            // 显示进度对话框
+            showConservativeProgressModal(result.task_id, 'conservative', result);
+
+            showMessage('保守同步已启动', 'success');
+        } else {
+            throw new Error(result.detail || '启动保守同步失败');
+        }
+    } catch (error) {
+        console.error('启动保守同步失败:', error);
+        showMessage('启动失败: ' + error.message, 'danger');
+    }
+}
+
+/**
+ * 开始超级保守同步
+ */
+async function startUltraConservativeSync() {
+    const startPos = document.getElementById('ultraStartPos').value;
+    const count = document.getElementById('ultraCount').value;
+    const confirmed = document.getElementById('ultraConfirm').checked;
+
+    if (!confirmed) {
+        showMessage('请确认你已了解超级保守模式将使用极长时间', 'warning');
+        return;
+    }
+
+    const startPosNum = parseInt(startPos) - 1; // 转换为0基索引
+    const countNum = count ? parseInt(count) : null;
+
+    // 二次确认
+    const estimatedHours = countNum ? (countNum * 47 / 3600).toFixed(1) : '未知';
+    if (!confirm(`超级保守模式预计需要 ${estimatedHours} 小时，确定要继续吗？`)) {
+        return;
+    }
+
+    try {
+        showMessage('正在启动超级保守同步...', 'info');
+
+        const params = new URLSearchParams();
+        params.append('start_pos', startPosNum);
+        if (countNum) {
+            params.append('count', countNum);
+        }
+
+        const response = await fetch('/api/bilibili/sync-user-stats-ultra-conservative', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded'
+            },
+            body: params
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // 隐藏设置对话框
+            const settingsModal = bootstrap.Modal.getInstance(document.getElementById('ultraConservativeSyncModal'));
+            settingsModal.hide();
+
+            // 显示进度对话框
+            showConservativeProgressModal(result.task_id, 'ultra_conservative', result);
+
+            showMessage('超级保守同步已启动', 'success');
+        } else {
+            throw new Error(result.detail || '启动超级保守同步失败');
+        }
+    } catch (error) {
+        console.error('启动超级保守同步失败:', error);
+        showMessage('启动失败: ' + error.message, 'danger');
+    }
+}
+
+/**
+ * 显示保守同步进度对话框
+ */
+function showConservativeProgressModal(taskId, mode, initialData) {
+    // 更新标题
+    const modeTitle = document.getElementById('conservativeSyncModeTitle');
+    modeTitle.textContent = mode === 'ultra_conservative' ? '超级保守模式同步进度' : '保守模式同步进度';
+
+    // 设置初始数据
+    document.getElementById('conservativeTaskId').textContent = taskId;
+    document.getElementById('conservativeStartTime').textContent = new Date().toLocaleString('zh-CN');
+    document.getElementById('conservativeTotalCount').textContent = initialData.total_users || 0;
+
+    // 重置进度显示
+    resetConservativeProgress();
+
+    // 显示对话框
+    const modal = new bootstrap.Modal(document.getElementById('conservativeSyncProgressModal'));
+    modal.show();
+
+    // 开始轮询进度
+    window.conservativeSyncTaskId = taskId;
+    window.conservativeSyncStartTime = Date.now();
+    startConservativeProgressPolling(taskId);
+}
+
+/**
+ * 重置保守同步进度显示
+ */
+function resetConservativeProgress() {
+    document.getElementById('conservativeSyncProgress').style.width = '0%';
+    document.getElementById('conservativeSyncProgress').textContent = '0%';
+    document.getElementById('conservativeSuccessCount').textContent = '0';
+    document.getElementById('conservativeFailedCount').textContent = '0';
+    document.getElementById('conservativeSkippedCount').textContent = '0';
+    document.getElementById('conservativeSyncStatus').textContent = '准备开始保守同步...';
+    document.getElementById('conservativeSyncCurrentUser').textContent = '';
+    document.getElementById('conservativeElapsedTime').textContent = '-';
+
+    // 显示/隐藏相关元素
+    document.getElementById('conservativeSyncSpinner').style.display = 'block';
+    document.getElementById('conservativeSyncCloseBtn').style.display = 'none';
+    document.getElementById('conservativeEstimatedTime').style.display = 'none';
+}
+
+/**
+ * 开始保守同步进度轮询
+ */
+function startConservativeProgressPolling(taskId) {
+    window.conservativeProgressInterval = setInterval(async () => {
+        try {
+            const response = await fetch(`/api/bilibili/task-progress/${taskId}`);
+            const data = await response.json();
+
+            if (response.ok) {
+                updateConservativeProgress(data);
+
+                // 检查任务是否完成
+                if (data.status === 'completed' || data.status === 'failed') {
+                    clearInterval(window.conservativeProgressInterval);
+                    handleConservativeTaskComplete(data);
+                }
+            } else {
+                console.error('获取进度失败:', data);
+            }
+        } catch (error) {
+            console.error('轮询进度时出错:', error);
+        }
+    }, 2000); // 每2秒轮询一次
+}
+
+/**
+ * 更新保守同步进度显示
+ */
+function updateConservativeProgress(data) {
+    // 更新进度条
+    const progress = data.progress || 0;
+    const progressBar = document.getElementById('conservativeSyncProgress');
+    progressBar.style.width = progress + '%';
+    progressBar.textContent = progress.toFixed(1) + '%';
+
+    // 更新状态文本
+    document.getElementById('conservativeSyncStatus').textContent = data.message || '处理中...';
+    document.getElementById('conservativeSyncCurrentUser').textContent = data.current_user ? `当前: ${data.current_user}` : '';
+
+    // 更新计数器
+    document.getElementById('conservativeSuccessCount').textContent = data.successful_users || 0;
+    document.getElementById('conservativeFailedCount').textContent = data.failed_users || 0;
+    document.getElementById('conservativeSkippedCount').textContent = data.skipped_users || 0;
+
+    // 更新已用时间
+    if (window.conservativeSyncStartTime) {
+        const elapsed = Math.floor((Date.now() - window.conservativeSyncStartTime) / 1000);
+        const hours = Math.floor(elapsed / 3600);
+        const minutes = Math.floor((elapsed % 3600) / 60);
+        const seconds = elapsed % 60;
+
+        let timeStr = '';
+        if (hours > 0) timeStr += `${hours}小时`;
+        if (minutes > 0) timeStr += `${minutes}分钟`;
+        timeStr += `${seconds}秒`;
+
+        document.getElementById('conservativeElapsedTime').textContent = timeStr;
+    }
+
+    // 预估完成时间
+    if (data.processed_users && data.total_users && data.processed_users > 0) {
+        const avgTimePerUser = (Date.now() - window.conservativeSyncStartTime) / 1000 / data.processed_users;
+        const remainingUsers = data.total_users - data.processed_users;
+        const estimatedSeconds = remainingUsers * avgTimePerUser;
+
+        if (estimatedSeconds > 0) {
+            const estimatedHours = Math.floor(estimatedSeconds / 3600);
+            const estimatedMinutes = Math.floor((estimatedSeconds % 3600) / 60);
+
+            let estimateStr = '';
+            if (estimatedHours > 0) estimateStr += `${estimatedHours}小时`;
+            if (estimatedMinutes > 0) estimateStr += `${estimatedMinutes}分钟`;
+
+            document.getElementById('conservativeTimeEstimate').textContent = estimateStr || '不到1分钟';
+            document.getElementById('conservativeEstimatedTime').style.display = 'block';
+        }
+    }
+}
+
+/**
+ * 处理保守同步任务完成
+ */
+function handleConservativeTaskComplete(data) {
+    // 隐藏进度条和Spinner
+    document.getElementById('conservativeSyncSpinner').style.display = 'none';
+    const progressBar = document.getElementById('conservativeSyncProgress');
+    progressBar.classList.remove('progress-bar-animated');
+
+    // 隐藏停止同步按钮，显示关闭和导出按钮
+    const stopBtn = document.querySelector('#conservativeSyncProgressModal .btn-danger');
+    if (stopBtn) stopBtn.style.display = 'none';
+    document.getElementById('conservativeExportBtn').style.display = 'block';
+    document.getElementById('conservativeSyncCloseBtn').style.display = 'block';
+
+    // 隐藏预估时间
+    document.getElementById('conservativeEstimatedTime').style.display = 'none';
+
+    if (data.status === 'completed') {
+        progressBar.classList.add('bg-success');
+
+        // 显示完成状态
+        showConservativeCompletionSummary(data);
+        showMessage('保守同步完成！', 'success');
+
+        // 更新页面标题
+        document.getElementById('conservativeSyncModeTitle').innerHTML =
+            '<i class="bi bi-check-circle-fill text-success"></i> 保守同步已完成';
+
+    } else {
+        progressBar.classList.add('bg-danger');
+
+        // 显示失败状态
+        showConservativeFailureSummary(data);
+        showMessage('保守同步失败', 'danger');
+
+        // 更新页面标题
+        document.getElementById('conservativeSyncModeTitle').innerHTML =
+            '<i class="bi bi-x-circle-fill text-danger"></i> 保守同步失败';
+    }
+
+    // 刷新页面数据
+    setTimeout(() => {
+        loadDashboardData();
+    }, 2000);
+}
+
+/**
+ * 显示保守同步完成摘要
+ */
+function showConservativeCompletionSummary(data) {
+    const startTime = data.start_time ? new Date(data.start_time) : null;
+    const endTime = data.end_time ? new Date(data.end_time) : new Date();
+
+    // 计算总耗时
+    let duration = '未知';
+    if (startTime && endTime) {
+        const durationMs = endTime - startTime;
+        const hours = Math.floor(durationMs / (1000 * 60 * 60));
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((durationMs % (1000 * 60)) / 1000);
+
+        if (hours > 0) {
+            duration = `${hours}小时${minutes}分钟${seconds}秒`;
+        } else if (minutes > 0) {
+            duration = `${minutes}分钟${seconds}秒`;
+        } else {
+            duration = `${seconds}秒`;
+        }
+    }
+
+    // 计算平均处理时间
+    const avgTime = data.total_users && startTime && endTime ?
+        Math.round((endTime - startTime) / 1000 / data.total_users) : 0;
+
+    const summaryHtml = `
+        <div class="alert alert-success mb-3">
+            <h6 class="mb-3"><i class="bi bi-check-circle-fill"></i> 同步完成摘要</h6>
+            <div class="row text-center mb-3">
+                <div class="col-3">
+                    <div class="h4 text-success mb-1">${data.successful_users || 0}</div>
+                    <small class="text-muted">成功处理</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-danger mb-1">${data.failed_users || 0}</div>
+                    <small class="text-muted">处理失败</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-warning mb-1">${data.skipped_users || 0}</div>
+                    <small class="text-muted">智能跳过</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-info mb-1">${data.total_users || 0}</div>
+                    <small class="text-muted">总计</small>
+                </div>
+            </div>
+            
+            <hr class="my-3">
+            
+            <div class="row small text-muted">
+                <div class="col-md-6">
+                    <div><strong>开始时间：</strong>${startTime ? startTime.toLocaleString('zh-CN') : '未知'}</div>
+                    <div><strong>结束时间：</strong>${endTime.toLocaleString('zh-CN')}</div>
+                    <div><strong>总耗时：</strong>${duration}</div>
+                </div>
+                <div class="col-md-6">
+                    <div><strong>平均处理时间：</strong>${avgTime}秒/用户</div>
+                    <div><strong>成功率：</strong>${data.total_users ? Math.round((data.successful_users || 0) / data.total_users * 100) : 0}%</div>
+                    <div><strong>任务ID：</strong>${data.task_id || '未知'}</div>
+                </div>
+            </div>
+            
+            ${(data.failed_users || 0) > 0 ? `
+                <hr class="my-3">
+                <div class="alert alert-warning mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong><i class="bi bi-exclamation-triangle"></i> 处理失败的用户 (${data.failed_users}个)</strong>
+                        <button class="btn btn-sm btn-outline-warning" onclick="toggleFailedUserList()">
+                            <i class="bi bi-chevron-down"></i> 查看详情
+                        </button>
+                    </div>
+                    <div id="failedUsersList" style="display: none;">
+                        ${generateFailedUsersTable(data.failed_user_list || [])}
+                    </div>
+                    <small><strong>提醒：</strong>失败的用户可稍后重新同步，或查看日志了解详细原因。</small>
+                </div>
+            ` : ''}
+            
+            ${(data.skipped_users || 0) > 0 ? `
+                <hr class="my-3">
+                <div class="alert alert-info mb-0">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <strong><i class="bi bi-info-circle"></i> 智能跳过的用户 (${data.skipped_users}个)</strong>
+                        <button class="btn btn-sm btn-outline-info" onclick="toggleSkippedUserList()">
+                            <i class="bi bi-chevron-down"></i> 查看详情
+                        </button>
+                    </div>
+                    <div id="skippedUsersList" style="display: none;">
+                        ${generateSkippedUsersTable(data.skipped_user_list || [])}
+                    </div>
+                    <small><strong>说明：</strong>跳过的用户数据较新，无需重复处理。</small>
+                </div>
+            ` : ''}
+        </div>
+    `;
+
+    document.getElementById('conservativeSyncStatus').innerHTML = summaryHtml;
+    document.getElementById('conservativeSyncCurrentUser').textContent = '';
+}
+
+/**
+ * 显示保守同步失败摘要
+ */
+function showConservativeFailureSummary(data) {
+    const startTime = data.start_time ? new Date(data.start_time) : null;
+    const endTime = data.end_time ? new Date(data.end_time) : new Date();
+
+    const summaryHtml = `
+        <div class="alert alert-danger mb-3">
+            <h6 class="mb-3"><i class="bi bi-x-circle-fill"></i> 同步失败摘要</h6>
+            <div class="mb-3">
+                <strong>失败原因：</strong>${data.message || '未知错误'}
+            </div>
+            
+            <div class="row text-center mb-3">
+                <div class="col-3">
+                    <div class="h4 text-success mb-1">${data.successful_users || 0}</div>
+                    <small class="text-muted">已成功</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-danger mb-1">${data.failed_users || 0}</div>
+                    <small class="text-muted">已失败</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-warning mb-1">${data.skipped_users || 0}</div>
+                    <small class="text-muted">已跳过</small>
+                </div>
+                <div class="col-3">
+                    <div class="h4 text-muted mb-1">${data.processed_users || 0}</div>
+                    <small class="text-muted">已处理</small>
+                </div>
+            </div>
+            
+            <hr class="my-3">
+            
+            <div class="small text-muted">
+                <div><strong>开始时间：</strong>${startTime ? startTime.toLocaleString('zh-CN') : '未知'}</div>
+                <div><strong>失败时间：</strong>${endTime.toLocaleString('zh-CN')}</div>
+                <div><strong>任务ID：</strong>${data.task_id || '未知'}</div>
+            </div>
+            
+            <hr class="my-3">
+            
+            <div class="alert alert-warning mb-0">
+                <small><strong><i class="bi bi-lightbulb"></i> 建议：</strong>
+                可以记录当前进度位置，稍后从失败位置继续同步。或尝试使用超级保守模式。</small>
+            </div>
+        </div>
+    `;
+
+    document.getElementById('conservativeSyncStatus').innerHTML = summaryHtml;
+    document.getElementById('conservativeSyncCurrentUser').textContent = '';
+}
+
+/**
+ * 取消保守同步
+ */
+function cancelConservativeSync() {
+    if (window.conservativeProgressInterval) {
+        clearInterval(window.conservativeProgressInterval);
+    }
+
+    if (window.conservativeSyncTaskId) {
+        // 这里可以添加取消任务的API调用
+        // 目前只是清理本地状态
+        window.conservativeSyncTaskId = null;
+        window.conservativeSyncStartTime = null;
+    }
+
+    // 隐藏进度对话框
+    const modal = bootstrap.Modal.getInstance(document.getElementById('conservativeSyncProgressModal'));
+    if (modal) {
+        modal.hide();
+    }
+
+    showMessage('已取消保守同步监控', 'info');
+}
+
+/**
+ * 生成失败用户表格
+ */
+function generateFailedUsersTable(failedUsers) {
+    if (!failedUsers || failedUsers.length === 0) {
+        return '<small class="text-muted">暂无失败用户详情</small>';
+    }
+
+    const maxDisplay = 10; // 最多显示10个
+    const displayUsers = failedUsers.slice(0, maxDisplay);
+    const hasMore = failedUsers.length > maxDisplay;
+
+    let tableHtml = `
+        <div class="table-responsive mt-2">
+            <table class="table table-sm table-bordered">
+                <thead class="table-warning">
+                    <tr>
+                        <th width="15%">UID</th>
+                        <th width="30%">用户名</th>
+                        <th width="55%">失败原因</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    displayUsers.forEach(user => {
+        tableHtml += `
+            <tr>
+                <td><small>${user.uid}</small></td>
+                <td><small>${user.uname}</small></td>
+                <td><small class="text-muted">${user.reason}</small></td>
+            </tr>
+        `;
+    });
+
+    tableHtml += '</tbody></table>';
+
+    if (hasMore) {
+        tableHtml += `<small class="text-muted">... 还有 ${failedUsers.length - maxDisplay} 个用户，详情请查看日志</small>`;
+    }
+
+    tableHtml += '</div>';
+
+    return tableHtml;
+}
+
+/**
+ * 生成跳过用户表格
+ */
+function generateSkippedUsersTable(skippedUsers) {
+    if (!skippedUsers || skippedUsers.length === 0) {
+        return '<small class="text-muted">暂无跳过用户详情</small>';
+    }
+
+    const maxDisplay = 10; // 最多显示10个
+    const displayUsers = skippedUsers.slice(0, maxDisplay);
+    const hasMore = skippedUsers.length > maxDisplay;
+
+    let tableHtml = `
+        <div class="table-responsive mt-2">
+            <table class="table table-sm table-bordered">
+                <thead class="table-info">
+                    <tr>
+                        <th width="15%">UID</th>
+                        <th width="30%">用户名</th>
+                        <th width="55%">跳过原因</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    displayUsers.forEach(user => {
+        tableHtml += `
+            <tr>
+                <td><small>${user.uid}</small></td>
+                <td><small>${user.uname}</small></td>
+                <td><small class="text-muted">${user.reason}</small></td>
+            </tr>
+        `;
+    });
+
+    tableHtml += '</tbody></table>';
+
+    if (hasMore) {
+        tableHtml += `<small class="text-muted">... 还有 ${skippedUsers.length - maxDisplay} 个用户</small>`;
+    }
+
+    tableHtml += '</div>';
+
+    return tableHtml;
+}
+
+/**
+ * 切换失败用户列表显示
+ */
+function toggleFailedUserList() {
+    const list = document.getElementById('failedUsersList');
+    const btn = event.target.closest('button');
+    const icon = btn.querySelector('i');
+
+    if (list.style.display === 'none') {
+        list.style.display = 'block';
+        icon.className = 'bi bi-chevron-up';
+        btn.innerHTML = '<i class="bi bi-chevron-up"></i> 隐藏详情';
+    } else {
+        list.style.display = 'none';
+        icon.className = 'bi bi-chevron-down';
+        btn.innerHTML = '<i class="bi bi-chevron-down"></i> 查看详情';
+    }
+}
+
+/**
+ * 切换跳过用户列表显示
+ */
+function toggleSkippedUserList() {
+    const list = document.getElementById('skippedUsersList');
+    const btn = event.target.closest('button');
+    const icon = btn.querySelector('i');
+
+    if (list.style.display === 'none') {
+        list.style.display = 'block';
+        icon.className = 'bi bi-chevron-up';
+        btn.innerHTML = '<i class="bi bi-chevron-up"></i> 隐藏详情';
+    } else {
+        list.style.display = 'none';
+        icon.className = 'bi bi-chevron-down';
+        btn.innerHTML = '<i class="bi bi-chevron-down"></i> 查看详情';
+    }
+}
+
+/**
+ * 导出同步报告
+ */
+function exportSyncReport() {
+    if (!window.conservativeSyncTaskId) {
+        showMessage('无法导出报告：任务ID不存在', 'warning');
+        return;
+    }
+
+    // 获取当前任务数据
+    fetch(`/api/bilibili/task-progress/${window.conservativeSyncTaskId}`)
+        .then(response => response.json())
+        .then(data => {
+            const report = generateSyncReport(data);
+            downloadReport(report, `保守同步报告_${window.conservativeSyncTaskId}.txt`);
+        })
+        .catch(error => {
+            console.error('导出报告失败:', error);
+            showMessage('导出报告失败', 'danger');
+        });
+}
+
+/**
+ * 生成同步报告文本
+ */
+function generateSyncReport(data) {
+    const startTime = data.start_time ? new Date(data.start_time) : null;
+    const endTime = data.end_time ? new Date(data.end_time) : new Date();
+
+    // 计算总耗时
+    let duration = '未知';
+    if (startTime && endTime) {
+        const durationMs = endTime - startTime;
+        const hours = Math.floor(durationMs / (1000 * 60 * 60));
+        const minutes = Math.floor((durationMs % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((durationMs % (1000 * 60)) / 1000);
+
+        if (hours > 0) {
+            duration = `${hours}小时${minutes}分钟${seconds}秒`;
+        } else if (minutes > 0) {
+            duration = `${minutes}分钟${seconds}秒`;
+        } else {
+            duration = `${seconds}秒`;
+        }
+    }
+
+    const avgTime = data.total_users && startTime && endTime ?
+        Math.round((endTime - startTime) / 1000 / data.total_users) : 0;
+
+    let report = `
+=====================================
+       哔哩哔哩保守同步报告
+=====================================
+
+📊 基本信息
+=====================================
+任务ID: ${data.task_id}
+同步模式: ${data.mode === 'conservative' ? '保守模式' : '超级保守模式'}
+开始时间: ${startTime ? startTime.toLocaleString('zh-CN') : '未知'}
+结束时间: ${endTime.toLocaleString('zh-CN')}
+总耗时: ${duration}
+状态: ${data.status === 'completed' ? '已完成' : '失败'}
+
+📈 处理统计
+=====================================
+总用户数: ${data.total_users || 0}
+成功处理: ${data.successful_users || 0}
+处理失败: ${data.failed_users || 0}
+智能跳过: ${data.skipped_users || 0}
+成功率: ${data.total_users ? Math.round((data.successful_users || 0) / data.total_users * 100) : 0}%
+平均处理时间: ${avgTime}秒/用户
+
+`;
+
+    // 添加失败用户详情
+    if (data.failed_user_list && data.failed_user_list.length > 0) {
+        report += `
+❌ 处理失败的用户 (${data.failed_user_list.length}个)
+=====================================
+`;
+        data.failed_user_list.forEach((user, index) => {
+            report += `${index + 1}. UID: ${user.uid}, 用户名: ${user.uname}\n   失败原因: ${user.reason}\n\n`;
+        });
+    }
+
+    // 添加跳过用户详情
+    if (data.skipped_user_list && data.skipped_user_list.length > 0) {
+        report += `
+⏭️ 智能跳过的用户 (${data.skipped_user_list.length}个)
+=====================================
+`;
+        data.skipped_user_list.forEach((user, index) => {
+            report += `${index + 1}. UID: ${user.uid}, 用户名: ${user.uname}\n   跳过原因: ${user.reason}\n\n`;
+        });
+    }
+
+    report += `
+📝 备注说明
+=====================================
+• 失败用户可稍后重新同步
+• 跳过用户表示数据较新，无需重复处理
+• 详细日志请查看系统日志文件
+
+报告生成时间: ${new Date().toLocaleString('zh-CN')}
+=====================================
+`;
+
+    return report;
+}
+
+/**
+ * 下载报告文件
+ */
+function downloadReport(content, filename) {
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+
+    showMessage('同步报告已导出', 'success');
+}
+
+// 将保守同步功能暴露到全局作用域
+window.showConservativeSyncDialog = showConservativeSyncDialog;
+window.showUltraConservativeSyncDialog = showUltraConservativeSyncDialog;
+window.startConservativeSync = startConservativeSync;
+window.startUltraConservativeSync = startUltraConservativeSync;
+window.cancelConservativeSync = cancelConservativeSync;
+window.toggleFailedUserList = toggleFailedUserList;
+window.toggleSkippedUserList = toggleSkippedUserList;
+window.exportSyncReport = exportSyncReport; 

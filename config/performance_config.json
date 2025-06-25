@@ -1,0 +1,276 @@
+{
+    "performance_profiles": {
+        "conservative": {
+            "description": "保守模式 - 适合网络不稳定或担心被风控的情况",
+            "max_concurrent_requests": 3,
+            "batch_size": 20,
+            "base_delay": 0.5,
+            "min_delay": 0.3,
+            "max_delay": 8.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 600,
+            "failure_rate_threshold": 0.5,
+            "rate_limit_cooldown": 60
+        },
+        "balanced": {
+            "description": "平衡模式 - 推荐配置，在效率和稳定性之间取得平衡",
+            "max_concurrent_requests": 6,
+            "batch_size": 30,
+            "base_delay": 0.3,
+            "min_delay": 0.1,
+            "max_delay": 6.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 300,
+            "failure_rate_threshold": 0.6,
+            "rate_limit_cooldown": 30
+        },
+        "aggressive": {
+            "description": "激进模式 - 最大化效率，适合网络稳定且不担心风控的情况",
+            "max_concurrent_requests": 10,
+            "batch_size": 50,
+            "base_delay": 0.1,
+            "min_delay": 0.05,
+            "max_delay": 4.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 180,
+            "failure_rate_threshold": 0.7,
+            "rate_limit_cooldown": 20
+        },
+        "large_scale": {
+            "description": "大规模模式 - 专为1000+用户设计，注重长期稳定性",
+            "max_concurrent_requests": 8,
+            "batch_size": 40,
+            "base_delay": 0.2,
+            "min_delay": 0.1,
+            "max_delay": 5.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 900,
+            "failure_rate_threshold": 0.6,
+            "rate_limit_cooldown": 45,
+            "special_settings": {
+                "enable_batch_commits": true,
+                "commit_interval": 50,
+                "enable_gc": true,
+                "gc_interval": 100,
+                "max_task_duration_hours": 8
+            }
+        },
+        "高效模式 (适合大量用户)": {
+            "description": "适合1000+用户的高效处理，但可能触发风控",
+            "max_concurrent_requests": 8,
+            "batch_size": 40,
+            "base_delay": 0.2,
+            "min_delay": 0.1,
+            "max_delay": 3.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 600,
+            "failure_rate_threshold": 0.4,
+            "failure_window_size": 20,
+            "rate_limit_cooldown": 60
+        },
+        "平衡模式 (推荐)": {
+            "description": "速度和稳定性的平衡，适合500-1000用户",
+            "max_concurrent_requests": 6,
+            "batch_size": 30,
+            "base_delay": 0.5,
+            "min_delay": 0.2,
+            "max_delay": 6.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 600,
+            "failure_rate_threshold": 0.3,
+            "failure_window_size": 15,
+            "rate_limit_cooldown": 90
+        },
+        "稳定模式 (适合中等规模)": {
+            "description": "稳定可靠，适合100-500用户",
+            "max_concurrent_requests": 4,
+            "batch_size": 20,
+            "base_delay": 1.0,
+            "min_delay": 0.5,
+            "max_delay": 8.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 900,
+            "failure_rate_threshold": 0.25,
+            "failure_window_size": 12,
+            "rate_limit_cooldown": 120
+        },
+        "保守模式 (避免风控)": {
+            "description": "单线程处理，最大程度避免风控，适合敏感环境",
+            "max_concurrent_requests": 1,
+            "batch_size": 10,
+            "base_delay": 2.0,
+            "min_delay": 1.0,
+            "max_delay": 15.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 1800,
+            "failure_rate_threshold": 0.3,
+            "failure_window_size": 10,
+            "rate_limit_cooldown": 120,
+            "风控恢复时间": 300,
+            "用户间延迟": "3-6秒",
+            "风控检测": "严格",
+            "重试策略": "保守"
+        },
+        "测试模式 (小规模测试)": {
+            "description": "用于测试，处理少量用户",
+            "max_concurrent_requests": 2,
+            "batch_size": 5,
+            "base_delay": 2.0,
+            "min_delay": 1.0,
+            "max_delay": 10.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 300,
+            "failure_rate_threshold": 0.2,
+            "failure_window_size": 5,
+            "rate_limit_cooldown": 60
+        },
+        "夜间模式 (低负载时段)": {
+            "description": "夜间或低负载时段使用，相对激进",
+            "max_concurrent_requests": 10,
+            "batch_size": 50,
+            "base_delay": 0.1,
+            "min_delay": 0.05,
+            "max_delay": 2.0,
+            "adaptive_delay": true,
+            "enable_cache": true,
+            "cache_ttl": 300,
+            "failure_rate_threshold": 0.5,
+            "failure_window_size": 25,
+            "rate_limit_cooldown": 30
+        }
+    },
+    "api_optimization": {
+        "bilibili": {
+            "api_delay_optimized": 0.2,
+            "retry_times_optimized": 2,
+            "timeout_optimized": 20,
+            "smart_retry_configs": {
+                "user_info": {
+                    "max_retries": 2,
+                    "backoff": 1.5
+                },
+                "user_stats": {
+                    "max_retries": 3,
+                    "backoff": 2.0
+                },
+                "user_videos": {
+                    "max_retries": 2,
+                    "backoff": 1.5
+                },
+                "following_list": {
+                    "max_retries": 3,
+                    "backoff": 2.0
+                }
+            }
+        }
+    },
+    "database_optimization": {
+        "batch_insert_size": 50,
+        "commit_frequency": 50,
+        "enable_wal_mode": true,
+        "cache_size_mb": 64,
+        "temp_store": "memory",
+        "synchronous": "normal",
+        "journal_mode": "wal"
+    },
+    "monitoring": {
+        "enable_performance_logging": true,
+        "log_interval_seconds": 30,
+        "enable_memory_monitoring": true,
+        "enable_rate_monitoring": true,
+        "performance_thresholds": {
+            "min_success_rate": 0.8,
+            "max_avg_response_time": 3.0,
+            "max_memory_usage_mb": 512,
+            "min_processing_rate": 0.5
+        }
+    },
+    "user_scale_recommendations": {
+        "small": {
+            "user_count_range": "1-100",
+            "recommended_profile": "balanced",
+            "estimated_time_minutes": "5-15",
+            "notes": "小规模用户，使用平衡模式即可获得良好效果"
+        },
+        "medium": {
+            "user_count_range": "100-500",
+            "recommended_profile": "balanced",
+            "estimated_time_minutes": "15-60",
+            "notes": "中等规模用户，平衡模式提供最佳稳定性"
+        },
+        "large": {
+            "user_count_range": "500-1000",
+            "recommended_profile": "large_scale",
+            "estimated_time_minutes": "30-120",
+            "notes": "大规模用户，建议使用专门的大规模模式"
+        },
+        "extra_large": {
+            "user_count_range": "1000+",
+            "recommended_profile": "large_scale",
+            "estimated_time_minutes": "60-300",
+            "notes": "超大规模用户，必须使用大规模模式并考虑分批处理"
+        }
+    },
+    "troubleshooting": {
+        "high_failure_rate": {
+            "description": "失败率过高时的处理建议",
+            "solutions": [
+                "降低并发数到3-5",
+                "增加延迟时间到0.5秒以上",
+                "启用更严格的风控检测",
+                "检查Cookie是否有效",
+                "使用保守模式配置"
+            ]
+        },
+        "rate_limiting": {
+            "description": "遇到频率限制时的处理建议",
+            "solutions": [
+                "增加rate_limit_cooldown到60秒",
+                "降低failure_rate_threshold到0.4",
+                "减少batch_size到20以下",
+                "增加base_delay到0.5秒以上"
+            ]
+        },
+        "slow_performance": {
+            "description": "性能较慢时的优化建议",
+            "solutions": [
+                "增加并发数到8-10",
+                "减少延迟时间到0.2秒",
+                "增加batch_size到40-50",
+                "启用缓存并增加cache_ttl",
+                "使用激进模式配置"
+            ]
+        }
+    },
+    "使用说明": {
+        "保守模式特点": [
+            "单线程顺序处理，避免并发请求触发风控",
+            "较长的延迟时间 (2-15秒)，根据响应情况自适应调整",
+            "严格的风控检测，一旦检测到立即进入恢复模式",
+            "智能跳过机制，避免重复处理最近更新的用户",
+            "缓存机制有效期30分钟，减少重复API调用",
+            "详细的日志输出，便于问题排查"
+        ],
+        "推荐使用场景": {
+            "保守模式": "容易触发风控的环境，如已经触发过-352错误",
+            "平衡模式": "大多数正常使用场景",
+            "高效模式": "确认环境稳定且需要快速处理大量用户",
+            "测试模式": "测试新功能或小规模验证"
+        },
+        "风控应对策略": {
+            "预防": "使用保守模式，降低请求频率",
+            "检测": "监控-352、-503等错误码",
+            "恢复": "风控触发后等待5-10分钟再继续",
+            "规避": "使用更长的延迟和随机抖动"
+        }
+    }
+}

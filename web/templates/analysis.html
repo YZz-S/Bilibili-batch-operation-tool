@@ -282,17 +282,10 @@
 {% block content %}
 <div class="container-fluid">
     <!-- 数据更新时间提醒 -->
-    <div id="lastUpdatedAlert" class="alert alert-info" role="alert" style="
-        background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
-        border: none;
-        border-radius: 12px;
-        padding: 15px;
-        margin-bottom: 20px;
-        display: none;
-    ">
+    <div id="lastUpdatedAlert" class="alert data-status-alert" role="alert" style="display: none;">
         <div class="d-flex align-items-center justify-content-between">
             <div class="d-flex align-items-center">
-                <i class="fas fa-clock me-2 text-primary"></i>
+                <i class="fas fa-clock me-2"></i>
                 <span id="lastUpdatedText">正在加载数据更新时间...</span>
             </div>
             <a href="/user-stats" class="btn btn-outline-primary btn-sm">
@@ -539,7 +532,7 @@
                 <!-- 数据来源说明 -->
                 <div class="alert alert-warning" style="font-size: 0.8rem;">
                     <strong><i class="fas fa-exclamation-triangle"></i> 数据说明：</strong><br>
-                    当前使用模拟数据，可能不准确。
+                    数据已从数据库加载。
                     <div class="mt-2">
                         <button class="btn btn-primary btn-sm me-2" onclick="syncRealUserStats(0)">
                             <i class="fas fa-globe"></i> 同步全部用户
@@ -746,6 +739,41 @@
     });
 
     /**
+     * 格式化时间显示（支持多种时间格式）
+     */
+    function formatDateTime(timeValue) {
+        if (!timeValue) return null;
+
+        let date;
+
+        // 处理不同的时间格式
+        if (typeof timeValue === 'string') {
+            // ISO字符串或其他字符串格式
+            date = new Date(timeValue);
+        } else if (typeof timeValue === 'number') {
+            // 时间戳格式 - 自动检测秒或毫秒
+            if (timeValue < 10000000000) {
+                // 秒时间戳（小于10位数字）
+                date = new Date(timeValue * 1000);
+            } else {
+                // 毫秒时间戳
+                date = new Date(timeValue);
+            }
+        } else {
+            // 其他类型
+            date = new Date(timeValue);
+        }
+
+        // 验证日期是否有效
+        if (isNaN(date.getTime())) {
+            console.warn('无效的时间值:', timeValue);
+            return null;
+        }
+
+        return date;
+    }
+
+    /**
      * 加载数据更新时间信息
      */
     async function loadLastUpdatedInfo() {
@@ -757,36 +785,44 @@
                 const lastUpdatedAlert = document.getElementById('lastUpdatedAlert');
                 const lastUpdatedText = document.getElementById('lastUpdatedText');
 
-                if (data.time_info.last_updated) {
-                    const updateTime = new Date(data.time_info.last_updated * 1000);
-                    const now = new Date();
-                    const daysDiff = Math.floor((now - updateTime) / (1000 * 60 * 60 * 24));
+                if (data.time_info && data.time_info.last_updated) {
+                    const updateTime = formatDateTime(data.time_info.last_updated);
 
-                    let alertClass = 'alert-info';
-                    let message = '';
+                    if (updateTime) {
+                        const now = new Date();
+                        const daysDiff = Math.floor((now - updateTime) / (1000 * 60 * 60 * 24));
 
-                    if (daysDiff === 0) {
-                        message = `统计数据已更新至今日 ${updateTime.toLocaleString('zh-CN')}`;
-                        alertClass = 'alert-success';
-                    } else if (daysDiff <= 3) {
-                        message = `统计数据最后更新于 ${daysDiff} 天前 (${updateTime.toLocaleString('zh-CN')})`;
-                        alertClass = 'alert-info';
-                    } else if (daysDiff <= 7) {
-                        message = `统计数据已过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，建议重新同步`;
-                        alertClass = 'alert-warning';
+                        let alertClass = 'data-status-success';
+                        let message = '';
+
+                        if (daysDiff === 0) {
+                            message = `统计数据已更新至今日 ${updateTime.toLocaleString('zh-CN')}`;
+                            alertClass = 'data-status-success';
+                        } else if (daysDiff <= 3) {
+                            message = `统计数据最后更新于 ${daysDiff} 天前 (${updateTime.toLocaleString('zh-CN')})`;
+                            alertClass = 'data-status-info';
+                        } else if (daysDiff <= 7) {
+                            message = `统计数据已过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，建议重新同步`;
+                            alertClass = 'data-status-warning';
+                        } else {
+                            message = `统计数据严重过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，强烈建议立即同步`;
+                            alertClass = 'data-status-danger';
+                        }
+
+                        lastUpdatedText.textContent = message;
+
+                        // 更新样式
+                        lastUpdatedAlert.className = `alert data-status-alert ${alertClass}`;
+                        lastUpdatedAlert.style.display = 'block';
                     } else {
-                        message = `统计数据严重过期 ${daysDiff} 天 (${updateTime.toLocaleString('zh-CN')})，强烈建议立即同步`;
-                        alertClass = 'alert-danger';
+                        // 时间格式无效
+                        lastUpdatedText.textContent = '数据时间格式异常，建议重新同步数据';
+                        lastUpdatedAlert.className = 'alert data-status-alert data-status-warning';
+                        lastUpdatedAlert.style.display = 'block';
                     }
-
-                    lastUpdatedText.textContent = message;
-
-                    // 更新样式
-                    lastUpdatedAlert.className = `alert ${alertClass}`;
-                    lastUpdatedAlert.style.display = 'block';
                 } else {
                     lastUpdatedText.textContent = '暂无统计数据，请先执行"同步真实数据"功能获取准确的用户统计信息';
-                    lastUpdatedAlert.className = 'alert alert-warning';
+                    lastUpdatedAlert.className = 'alert data-status-alert data-status-warning';
                     lastUpdatedAlert.style.display = 'block';
                 }
             }

@@ -1702,3 +1702,584 @@ async def get_one_click_update_logs(task_id: str, req: Request, step: str = None
     except Exception as e:
         logger.error(f"获取任务日志失败: {e}")
         raise HTTPException(status_code=500, detail="获取任务日志失败") 
+
+# 在文件末尾添加保守同步相关的接口
+
+@router.post("/sync-user-stats-conservative")
+async def sync_user_stats_conservative(req: Request, background_tasks: BackgroundTasks, 
+                                     start_pos: int = 0, count: Optional[int] = None):
+    """保守模式同步用户统计数据"""
+    try:
+        db_manager = req.app.state.db_manager
+        api = await get_bilibili_api()
+        
+        if not api.is_configured():
+            raise HTTPException(status_code=400, detail="请先配置哔哩哔哩Cookie")
+        
+        # 创建任务ID
+        import time
+        task_id = f"conservative_sync_{int(time.time())}"
+        
+        # 初始化进度跟踪缓存
+        if not hasattr(db_manager, '_sync_progress_cache'):
+            db_manager._sync_progress_cache = {}
+        
+        # 获取关注列表
+        following_list = await db_manager.get_following_list()
+        
+        # 确定处理范围
+        end_pos = min(start_pos + count, len(following_list)) if count else len(following_list)
+        users_to_process = following_list[start_pos:end_pos]
+        
+        logger.info(f"开始保守模式同步：处理位置 {start_pos+1}-{end_pos} 的 {len(users_to_process)} 个用户")
+        
+        # 初始化进度信息
+        progress_info = {
+            "task_id": task_id,
+            "mode": "conservative",
+            "status": "running",
+            "progress": 0,
+            "total_users": len(users_to_process),
+            "processed_users": 0,
+            "successful_users": 0,
+            "failed_users": 0,
+            "skipped_users": 0,
+            "wind_control_hits": 0,
+            "current_user": "",
+            "start_time": datetime.now(),
+            "end_time": None,
+            "message": "开始保守模式同步...",
+            "failed_user_list": [],  # 记录失败的用户
+            "skipped_user_list": []  # 记录跳过的用户
+        }
+        db_manager._sync_progress_cache[task_id] = progress_info
+        
+        # 在后台执行保守同步任务
+        background_tasks.add_task(_conservative_sync_task, db_manager, task_id, users_to_process, start_pos)
+        
+        return {
+            "message": "保守模式同步任务已启动",
+            "task_id": task_id,
+            "mode": "conservative",
+            "total_users": len(users_to_process),
+            "start_position": start_pos + 1,
+            "status": "started"
+        }
+        
+    except Exception as e:
+        logger.error(f"启动保守模式同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动保守同步失败: {str(e)}")
+
+
+@router.post("/sync-user-stats-ultra-conservative")
+async def sync_user_stats_ultra_conservative(req: Request, background_tasks: BackgroundTasks,
+                                           start_pos: int = 0, count: Optional[int] = None):
+    """超级保守模式同步用户统计数据"""
+    try:
+        db_manager = req.app.state.db_manager
+        api = await get_bilibili_api()
+        
+        if not api.is_configured():
+            raise HTTPException(status_code=400, detail="请先配置哔哩哔哩Cookie")
+        
+        # 创建任务ID
+        import time
+        task_id = f"ultra_conservative_sync_{int(time.time())}"
+        
+        # 初始化进度跟踪缓存
+        if not hasattr(db_manager, '_sync_progress_cache'):
+            db_manager._sync_progress_cache = {}
+        
+        # 获取关注列表
+        following_list = await db_manager.get_following_list()
+        
+        # 确定处理范围
+        end_pos = min(start_pos + count, len(following_list)) if count else len(following_list)
+        users_to_process = following_list[start_pos:end_pos]
+        
+        logger.info(f"开始超级保守模式同步：处理位置 {start_pos+1}-{end_pos} 的 {len(users_to_process)} 个用户")
+        
+        # 初始化进度信息
+        progress_info = {
+            "task_id": task_id,
+            "mode": "ultra_conservative",
+            "status": "running",
+            "progress": 0,
+            "total_users": len(users_to_process),
+            "processed_users": 0,
+            "successful_users": 0,
+            "failed_users": 0,
+            "skipped_users": 0,
+            "api_warnings": 0,
+            "current_user": "",
+            "start_time": datetime.now(),
+            "end_time": None,
+            "message": "开始超级保守模式同步...",
+            "failed_user_list": [],  # 记录失败的用户
+            "skipped_user_list": []  # 记录跳过的用户
+        }
+        db_manager._sync_progress_cache[task_id] = progress_info
+        
+        # 在后台执行超级保守同步任务
+        background_tasks.add_task(_ultra_conservative_sync_task, db_manager, task_id, users_to_process, start_pos)
+        
+        return {
+            "message": "超级保守模式同步任务已启动",
+            "task_id": task_id,
+            "mode": "ultra_conservative",
+            "total_users": len(users_to_process),
+            "start_position": start_pos + 1,
+            "estimated_time_hours": len(users_to_process) * 47 / 3600,  # 基于测试的47秒/用户
+            "status": "started"
+        }
+        
+    except Exception as e:
+        logger.error(f"启动超级保守模式同步任务失败: {e}")
+        raise HTTPException(status_code=500, detail=f"启动超级保守同步失败: {str(e)}")
+
+
+async def _conservative_sync_task(db_manager, task_id: str, users_to_process: list, start_pos: int):
+    """保守同步的后台任务"""
+    api = None
+    try:
+        api = await get_bilibili_api()
+        
+        # 保守同步配置
+        conservative_config = {
+            'base_delay': 3.0,
+            'min_delay': 2.0,
+            'max_delay': 15.0,
+            'api_call_delay': 0.5,
+            'max_failures': 10,
+            'batch_rest_interval': 60,  # 每5个用户休息1分钟
+            'batch_size': 5
+        }
+        
+        successful_users = 0
+        failed_users = 0
+        skipped_users = 0
+        wind_control_hits = 0
+        
+        for i, user in enumerate(users_to_process):
+            try:
+                # 检查任务是否被取消
+                if task_id not in db_manager._sync_progress_cache:
+                    break
+                
+                uid = user.get('uid') or user.get('mid')
+                uname = user.get('uname', f'User_{uid}')
+                
+                if not uid:
+                    skipped_users += 1
+                    continue
+                
+                # 更新当前处理状态
+                if task_id in db_manager._sync_progress_cache:
+                    db_manager._sync_progress_cache[task_id]["current_user"] = uname
+                    db_manager._sync_progress_cache[task_id]["message"] = f"保守模式处理用户 {uname} ({i+1}/{len(users_to_process)})"
+                
+                # 检查是否需要跳过（最近1小时内已更新）
+                if await _should_skip_user_conservative(db_manager, uid):
+                    skipped_users += 1
+                    logger.info(f"⏭️ 用户 {uname} 数据较新，跳过")
+                    
+                    # 记录跳过的用户
+                    if task_id in db_manager._sync_progress_cache:
+                        db_manager._sync_progress_cache[task_id]["skipped_user_list"].append({
+                            "uid": uid,
+                            "uname": uname,
+                            "reason": "数据较新（1小时内已更新）"
+                        })
+                else:
+                    # API调用前延迟
+                    await asyncio.sleep(conservative_config['api_call_delay'])
+                    
+                    # 获取用户统计信息
+                    logger.info(f"🔄 保守模式处理用户 {uname}")
+                    user_stats = await api.get_user_stats(uid)
+                    
+                    if user_stats:
+                        await _update_user_stats_to_db(db_manager, uid, user, user_stats)
+                        successful_users += 1
+                        logger.info(f"✅ 用户 {uname} 处理成功")
+                    else:
+                        failed_users += 1
+                        logger.warning(f"❌ 用户 {uname} 处理失败")
+                        
+                        # 记录失败的用户
+                        if task_id in db_manager._sync_progress_cache:
+                            db_manager._sync_progress_cache[task_id]["failed_user_list"].append({
+                                "uid": uid,
+                                "uname": uname,
+                                "reason": "API调用失败或返回数据为空"
+                            })
+                
+                # 批次休息
+                if (i + 1) % conservative_config['batch_size'] == 0:
+                    rest_time = conservative_config['batch_rest_interval']
+                    logger.info(f"😴 批次休息 {rest_time} 秒...")
+                    await asyncio.sleep(rest_time)
+                
+                # 更新进度
+                if task_id in db_manager._sync_progress_cache:
+                    progress = ((i + 1) / len(users_to_process)) * 100
+                    db_manager._sync_progress_cache[task_id].update({
+                        "processed_users": i + 1,
+                        "successful_users": successful_users,
+                        "failed_users": failed_users,
+                        "skipped_users": skipped_users,
+                        "progress": round(progress, 2)
+                    })
+                
+                # 用户间延迟
+                if i < len(users_to_process) - 1:
+                    delay = await _get_conservative_delay(conservative_config, failed_users, i + 1)
+                    await asyncio.sleep(delay)
+                
+            except Exception as e:
+                failed_users += 1
+                logger.error(f"处理用户失败: {e}")
+                
+                # 记录异常失败的用户
+                if task_id in db_manager._sync_progress_cache:
+                    user_name = user.get('uname', f'User_{user.get("uid", "unknown")}') if 'user' in locals() else '未知用户'
+                    db_manager._sync_progress_cache[task_id]["failed_user_list"].append({
+                        "uid": user.get('uid') if 'user' in locals() else 'unknown',
+                        "uname": user_name,
+                        "reason": f"处理异常: {str(e)}"
+                    })
+        
+        # 更新最终状态
+        if task_id in db_manager._sync_progress_cache:
+            db_manager._sync_progress_cache[task_id].update({
+                "status": "completed",
+                "progress": 100,
+                "successful_users": successful_users,
+                "failed_users": failed_users,
+                "skipped_users": skipped_users,
+                "end_time": datetime.now(),
+                "message": f"保守同步完成：成功 {successful_users}，失败 {failed_users}，跳过 {skipped_users}"
+            })
+        
+        logger.info(f"保守同步任务 {task_id} 完成：成功 {successful_users}，失败 {failed_users}，跳过 {skipped_users}")
+        
+    except Exception as e:
+        logger.error(f"保守同步任务失败: {e}")
+        if hasattr(db_manager, '_sync_progress_cache') and task_id in db_manager._sync_progress_cache:
+            db_manager._sync_progress_cache[task_id].update({
+                "status": "failed",
+                "message": f"保守同步失败: {str(e)}",
+                "end_time": datetime.now()
+            })
+    
+    finally:
+        if api:
+            try:
+                await api.close()
+            except:
+                pass
+
+
+async def _ultra_conservative_sync_task(db_manager, task_id: str, users_to_process: list, start_pos: int):
+    """超级保守同步的后台任务"""
+    api = None
+    try:
+        api = await get_bilibili_api()
+        
+        # 超级保守同步配置
+        ultra_config = {
+            'base_delay': 10.0,
+            'min_delay': 8.0,
+            'max_delay': 30.0,
+            'api_call_delay': 3.0,
+            'batch_rest_interval': 120,  # 每10个用户休息2分钟
+            'batch_size': 10
+        }
+        
+        # 预热等待
+        await asyncio.sleep(10)
+        
+        successful_users = 0
+        failed_users = 0
+        skipped_users = 0
+        api_warnings = 0
+        
+        for i, user in enumerate(users_to_process):
+            try:
+                # 检查任务是否被取消
+                if task_id not in db_manager._sync_progress_cache:
+                    break
+                
+                uid = user.get('uid') or user.get('mid')
+                uname = user.get('uname', f'User_{uid}')
+                
+                if not uid:
+                    skipped_users += 1
+                    continue
+                
+                # 更新当前处理状态
+                if task_id in db_manager._sync_progress_cache:
+                    db_manager._sync_progress_cache[task_id]["current_user"] = uname
+                    db_manager._sync_progress_cache[task_id]["message"] = f"超级保守模式处理用户 {uname} ({i+1}/{len(users_to_process)})"
+                
+                # 检查是否需要跳过（最近6小时内已更新）
+                if await _should_skip_user_ultra_conservative(db_manager, uid):
+                    skipped_users += 1
+                    logger.info(f"⏭️ 用户 {uname} 数据较新，跳过")
+                    
+                    # 记录跳过的用户
+                    if task_id in db_manager._sync_progress_cache:
+                        db_manager._sync_progress_cache[task_id]["skipped_user_list"].append({
+                            "uid": uid,
+                            "uname": uname,
+                            "reason": "数据较新（6小时内已更新）"
+                        })
+                else:
+                    # API调用前的额外延迟
+                    await asyncio.sleep(ultra_config['api_call_delay'])
+                    
+                    # 获取用户统计信息
+                    logger.info(f"🐌 超级保守模式处理用户 {uname}")
+                    user_stats = await api.get_user_stats(uid)
+                    
+                    if user_stats:
+                        await _update_user_stats_to_db(db_manager, uid, user, user_stats)
+                        successful_users += 1
+                        logger.info(f"✅ 用户 {uname} 处理成功")
+                    else:
+                        failed_users += 1
+                        api_warnings += 1
+                        logger.warning(f"❌ 用户 {uname} 处理失败")
+                        
+                        # 记录失败的用户
+                        if task_id in db_manager._sync_progress_cache:
+                            db_manager._sync_progress_cache[task_id]["failed_user_list"].append({
+                                "uid": uid,
+                                "uname": uname,
+                                "reason": "API调用失败或返回数据为空"
+                            })
+                        
+                        # API限制额外等待
+                        await asyncio.sleep(60)
+                
+                # 批次休息
+                if (i + 1) % ultra_config['batch_size'] == 0:
+                    rest_time = ultra_config['batch_rest_interval']
+                    logger.info(f"😴 批次休息 {rest_time} 秒，避免累积API压力...")
+                    await asyncio.sleep(rest_time)
+                
+                # 更新进度
+                if task_id in db_manager._sync_progress_cache:
+                    progress = ((i + 1) / len(users_to_process)) * 100
+                    db_manager._sync_progress_cache[task_id].update({
+                        "processed_users": i + 1,
+                        "successful_users": successful_users,
+                        "failed_users": failed_users,
+                        "skipped_users": skipped_users,
+                        "api_warnings": api_warnings,
+                        "progress": round(progress, 2)
+                    })
+                
+                # 超级保守的用户间延迟
+                if i < len(users_to_process) - 1:
+                    delay = await _get_ultra_conservative_delay(ultra_config, api_warnings, failed_users)
+                    await asyncio.sleep(delay)
+                
+            except Exception as e:
+                failed_users += 1
+                logger.error(f"处理用户失败: {e}")
+                
+                # 记录异常失败的用户
+                if task_id in db_manager._sync_progress_cache:
+                    user_name = user.get('uname', f'User_{user.get("uid", "unknown")}') if 'user' in locals() else '未知用户'
+                    db_manager._sync_progress_cache[task_id]["failed_user_list"].append({
+                        "uid": user.get('uid') if 'user' in locals() else 'unknown',
+                        "uname": user_name,
+                        "reason": f"处理异常: {str(e)}"
+                    })
+        
+        # 更新最终状态
+        if task_id in db_manager._sync_progress_cache:
+            db_manager._sync_progress_cache[task_id].update({
+                "status": "completed",
+                "progress": 100,
+                "successful_users": successful_users,
+                "failed_users": failed_users,
+                "skipped_users": skipped_users,
+                "api_warnings": api_warnings,
+                "end_time": datetime.now(),
+                "message": f"超级保守同步完成：成功 {successful_users}，失败 {failed_users}，跳过 {skipped_users}"
+            })
+        
+        logger.info(f"超级保守同步任务 {task_id} 完成：成功 {successful_users}，失败 {failed_users}，跳过 {skipped_users}")
+        
+    except Exception as e:
+        logger.error(f"超级保守同步任务失败: {e}")
+        if hasattr(db_manager, '_sync_progress_cache') and task_id in db_manager._sync_progress_cache:
+            db_manager._sync_progress_cache[task_id].update({
+                "status": "failed",
+                "message": f"超级保守同步失败: {str(e)}",
+                "end_time": datetime.now()
+            })
+    
+    finally:
+        if api:
+            try:
+                await api.close()
+            except:
+                pass
+
+
+async def _should_skip_user_conservative(db_manager, uid: int) -> bool:
+    """检查是否应该跳过用户（保守模式：1小时）"""
+    try:
+        cursor = await db_manager._connection.execute(
+            "SELECT updated_at FROM user_stats WHERE uid = ?", (uid,)
+        )
+        result = await cursor.fetchone()
+        if not result:
+            return False
+        
+        from datetime import datetime
+        try:
+            last_time = datetime.fromisoformat(result[0])
+            now = datetime.now()
+            return (now - last_time).total_seconds() < 3600  # 1小时
+        except:
+            return False
+    except:
+        return False
+
+
+async def _should_skip_user_ultra_conservative(db_manager, uid: int) -> bool:
+    """检查是否应该跳过用户（超级保守模式：6小时）"""
+    try:
+        cursor = await db_manager._connection.execute(
+            "SELECT updated_at FROM user_stats WHERE uid = ?", (uid,)
+        )
+        result = await cursor.fetchone()
+        if not result:
+            return False
+        
+        from datetime import datetime
+        try:
+            last_time = datetime.fromisoformat(result[0])
+            now = datetime.now()
+            return (now - last_time).total_seconds() < 21600  # 6小时
+        except:
+            return False
+    except:
+        return False
+
+
+async def _update_user_stats_to_db(db_manager, uid: int, user: dict, user_stats: dict):
+    """更新用户统计数据到数据库"""
+    try:
+        # 检查是否已存在
+        cursor = await db_manager._connection.execute(
+            "SELECT uid FROM user_stats WHERE uid = ?", (uid,)
+        )
+        existing = await cursor.fetchone()
+        
+        if existing:
+            # 更新现有记录
+            await db_manager._connection.execute("""
+                UPDATE user_stats SET 
+                    fans_count = ?, following_count = ?, video_count = ?,
+                    total_views = ?, last_video_time = ?, activity_score = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE uid = ?
+            """, (
+                user_stats["fans_count"], user_stats["following_count"],
+                user_stats["video_count"], user_stats["total_views"],
+                user_stats["last_video_time"], user_stats["activity_score"], uid
+            ))
+        else:
+            # 插入新记录
+            await db_manager._connection.execute("""
+                INSERT INTO user_stats 
+                (uid, fans_count, following_count, video_count, total_views, 
+                 last_video_time, activity_score) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                uid, user_stats["fans_count"], user_stats["following_count"],
+                user_stats["video_count"], user_stats["total_views"],
+                user_stats["last_video_time"], user_stats["activity_score"]
+            ))
+        
+        await db_manager._connection.commit()
+        
+    except Exception as e:
+        logger.error(f"更新用户统计数据到数据库失败: {e}")
+        raise
+
+
+async def _get_conservative_delay(config: dict, failed_count: int, processed_count: int) -> float:
+    """获取保守延迟"""
+    base_delay = config['base_delay']
+    
+    # 根据失败率调整
+    if processed_count > 0:
+        failure_rate = failed_count / processed_count
+        if failure_rate > 0.2:
+            base_delay *= (1 + failure_rate)
+    
+    # 随机抖动
+    import random
+    jitter = random.uniform(0.8, 1.2)
+    final_delay = base_delay * jitter
+    
+    return max(config['min_delay'], min(final_delay, config['max_delay']))
+
+
+async def _get_ultra_conservative_delay(config: dict, api_warnings: int, failed_count: int) -> float:
+    """获取超级保守延迟"""
+    base_delay = config['base_delay']
+    
+    # 根据API警告次数调整
+    if api_warnings > 0:
+        base_delay *= (1.0 + api_warnings * 0.5)
+    
+    # 根据失败次数调整
+    if failed_count > 0:
+        base_delay *= (1.0 + failed_count * 0.3)
+    
+    # 随机抖动
+    import random
+    jitter = random.uniform(0.9, 1.3)
+    final_delay = base_delay * jitter
+    
+    return max(config['min_delay'], min(final_delay, config['max_delay']))
+
+
+@router.get("/task-progress/{task_id}")
+async def get_task_progress(task_id: str, req: Request):
+    """获取任务进度（通用接口）"""
+    try:
+        db_manager = req.app.state.db_manager
+        
+        # 检查是否有进度缓存
+        if hasattr(db_manager, '_sync_progress_cache'):
+            if task_id in db_manager._sync_progress_cache:
+                progress_data = db_manager._sync_progress_cache[task_id]
+                
+                # 转换datetime对象为字符串
+                result = {}
+                for key, value in progress_data.items():
+                    if isinstance(value, datetime):
+                        result[key] = value.isoformat()
+                    else:
+                        result[key] = value
+                
+                return result
+        
+        # 如果缓存中没有，尝试从数据库查询
+        # 这里可以根据需要实现数据库查询逻辑
+        
+        raise HTTPException(status_code=404, detail=f"任务 {task_id} 不存在或已过期")
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取任务进度失败: {e}")
+        raise HTTPException(status_code=500, detail="获取任务进度失败")

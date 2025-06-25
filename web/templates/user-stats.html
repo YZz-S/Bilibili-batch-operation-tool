@@ -34,14 +34,37 @@
     }
 
     .last-updated-alert {
-        background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
-        border: none;
-        color: #333;
+        border: 1px solid #dee2e6;
         border-radius: 12px;
         padding: 15px;
         margin-bottom: 20px;
-        font-weight: bold;
+        font-weight: 500;
         text-align: center;
+    }
+
+    /* 不同状态的颜色主题 */
+    .last-updated-alert.alert-success {
+        background: linear-gradient(135deg, #d4f6d4 0%, #e8f5e8 100%);
+        color: #155724;
+        border-color: #c3e6cb;
+    }
+
+    .last-updated-alert.alert-info {
+        background: linear-gradient(135deg, #cce7ff 0%, #e3f2fd 100%);
+        color: #0c5460;
+        border-color: #bee5eb;
+    }
+
+    .last-updated-alert.alert-warning {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        color: #856404;
+        border-color: #ffeaa7;
+    }
+
+    .last-updated-alert.alert-danger {
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+        color: #721c24;
+        border-color: #f5c6cb;
     }
 
     .data-table {
@@ -330,13 +353,68 @@
         document.getElementById('coverageRate').textContent = data.basic_stats.coverage_rate + '%';
         document.getElementById('monthlyUpdates').textContent = data.time_info.updated_this_month;
 
-        // 更新最后更新时间
+        // 更新最后更新时间和样式
         const lastUpdatedText = document.getElementById('lastUpdatedText');
-        if (data.time_info.last_updated) {
-            const updateTime = new Date(data.time_info.last_updated * 1000).toLocaleString('zh-CN');
-            lastUpdatedText.textContent = `数据最后更新时间：${updateTime}`;
+        const lastUpdatedAlert = document.getElementById('lastUpdatedAlert');
+
+        if (data.time_info.last_updated && data.time_info.last_updated !== null) {
+            try {
+                // 处理时间戳，可能是秒或毫秒，也可能是ISO字符串
+                let updateTime;
+                const lastUpdated = data.time_info.last_updated;
+
+                if (typeof lastUpdated === 'string') {
+                    // ISO字符串格式
+                    updateTime = new Date(lastUpdated);
+                } else if (typeof lastUpdated === 'number') {
+                    // 时间戳格式，判断是秒还是毫秒
+                    if (lastUpdated > 10000000000) {
+                        // 毫秒时间戳
+                        updateTime = new Date(lastUpdated);
+                    } else {
+                        // 秒时间戳
+                        updateTime = new Date(lastUpdated * 1000);
+                    }
+                } else {
+                    throw new Error('Invalid timestamp format');
+                }
+
+                // 检查日期是否有效
+                if (isNaN(updateTime.getTime())) {
+                    throw new Error('Invalid date');
+                }
+
+                const now = new Date();
+                const daysDiff = Math.floor((now - updateTime) / (1000 * 60 * 60 * 24));
+
+                let alertClass = 'alert-info';
+                let message = '';
+
+                if (daysDiff === 0) {
+                    message = `数据最后更新时间：${updateTime.toLocaleString('zh-CN')} (今日更新)`;
+                    alertClass = 'alert-success';
+                } else if (daysDiff <= 3) {
+                    message = `数据最后更新时间：${updateTime.toLocaleString('zh-CN')} (${daysDiff}天前)`;
+                    alertClass = 'alert-info';
+                } else if (daysDiff <= 7) {
+                    message = `数据最后更新时间：${updateTime.toLocaleString('zh-CN')} (${daysDiff}天前，建议更新)`;
+                    alertClass = 'alert-warning';
+                } else {
+                    message = `数据最后更新时间：${updateTime.toLocaleString('zh-CN')} (${daysDiff}天前，强烈建议更新)`;
+                    alertClass = 'alert-danger';
+                }
+
+                lastUpdatedText.textContent = message;
+                lastUpdatedAlert.className = `alert last-updated-alert ${alertClass}`;
+
+            } catch (error) {
+                console.error('时间解析错误:', error, 'lastUpdated:', data.time_info.last_updated);
+                lastUpdatedText.textContent = '数据最后更新时间：时间格式错误';
+                lastUpdatedAlert.className = 'alert last-updated-alert alert-warning';
+            }
         } else {
             lastUpdatedText.textContent = '暂无统计数据，请先执行"同步真实数据"功能';
+            lastUpdatedAlert.className = 'alert last-updated-alert alert-warning';
         }
     }
 
@@ -477,7 +555,28 @@
         }
 
         try {
-            const date = new Date(timestamp * 1000);
+            let date;
+            if (typeof timestamp === 'string') {
+                // ISO字符串格式
+                date = new Date(timestamp);
+            } else if (typeof timestamp === 'number') {
+                // 时间戳格式，判断是秒还是毫秒
+                if (timestamp > 10000000000) {
+                    // 毫秒时间戳
+                    date = new Date(timestamp);
+                } else {
+                    // 秒时间戳
+                    date = new Date(timestamp * 1000);
+                }
+            } else {
+                return '格式错误';
+            }
+
+            // 检查日期是否有效
+            if (isNaN(date.getTime())) {
+                return '无效时间';
+            }
+
             return date.toLocaleString('zh-CN', {
                 year: 'numeric',
                 month: '2-digit',
@@ -486,7 +585,7 @@
                 minute: '2-digit'
             });
         } catch (error) {
-            console.error('时间格式化错误:', error);
+            console.error('时间格式化错误:', error, 'timestamp:', timestamp);
             return '格式错误';
         }
     }

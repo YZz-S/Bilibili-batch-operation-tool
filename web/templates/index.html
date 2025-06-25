@@ -2,11 +2,49 @@
 
 {% block title %}首页 - 哔哩哔哩关注列表管理工具{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* 数据状态提醒样式 */
+    .data-status-alert {
+        border: 1px solid #dee2e6;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 20px;
+        font-weight: 500;
+    }
+
+    /* 不同状态的颜色主题 */
+    .data-status-alert.alert-success {
+        background: linear-gradient(135deg, #d4f6d4 0%, #e8f5e8 100%);
+        color: #155724;
+        border-color: #c3e6cb;
+    }
+
+    .data-status-alert.alert-info {
+        background: linear-gradient(135deg, #cce7ff 0%, #e3f2fd 100%);
+        color: #0c5460;
+        border-color: #bee5eb;
+    }
+
+    .data-status-alert.alert-warning {
+        background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
+        color: #856404;
+        border-color: #ffeaa7;
+    }
+
+    .data-status-alert.alert-danger {
+        background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+        color: #721c24;
+        border-color: #f5c6cb;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="row">
     <!-- 欢迎区域 -->
     <div class="col-12 mb-4">
-        <div class="card border-0 bg-gradient-primary text-white">
+        <div class="card border-0 bg-gradient-primary text-white hero-section">
             <div class="card-body p-5">
                 <div class="row align-items-center">
                     <div class="col-md-8">
@@ -17,14 +55,14 @@
                         <p class="lead mb-4">
                             智能管理你的关注列表，支持批量操作、数据分析和自动分类
                         </p>
-                        <div class="d-flex gap-3">
-                            <button id="one-click-update-btn" class="btn btn-light btn-lg">
+                        <div class="d-flex gap-3 flex-wrap">
+                            <button onclick="showSyncOptionsModal()" class="btn btn-light btn-lg">
                                 <i class="bi bi-rocket-takeoff"></i>
                                 一键更新所有信息
                             </button>
-                            <button id="sync-btn" class="btn btn-outline-light btn-lg">
+                            <button onclick="showQuickSyncModal()" class="btn btn-outline-light btn-lg">
                                 <i class="bi bi-arrow-clockwise"></i>
-                                同步关注列表
+                                快速同步
                             </button>
                             <a href="/following" class="btn btn-outline-light btn-lg">
                                 <i class="bi bi-people"></i>
@@ -42,23 +80,17 @@
 
     <!-- 数据更新时间提醒 -->
     <div class="col-12 mb-4">
-        <div id="lastUpdatedAlert" class="alert alert-info" role="alert" style="
-            background: linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%);
-            border: none;
-            border-radius: 12px;
-            padding: 15px;
-            display: none;
-        ">
+        <div id="lastUpdatedAlert" class="alert data-status-alert" role="alert" style="display: none;">
             <div class="d-flex align-items-center justify-content-between">
                 <div class="d-flex align-items-center">
-                    <i class="bi bi-clock me-2 text-success"></i>
+                    <i class="bi bi-clock me-2"></i>
                     <span id="lastUpdatedText">正在加载数据更新时间...</span>
                 </div>
                 <div class="d-flex gap-2">
-                    <a href="/user-stats" class="btn btn-outline-success btn-sm">
+                    <a href="/user-stats" class="btn btn-outline-primary btn-sm">
                         <i class="bi bi-bar-chart me-1"></i>查看详细数据
                     </a>
-                    <button class="btn btn-success btn-sm" onclick="syncUserStats()">
+                    <button class="btn btn-primary btn-sm" onclick="syncUserStats()">
                         <i class="bi bi-arrow-clockwise me-1"></i>同步数据
                     </button>
                 </div>
@@ -314,6 +346,342 @@
                         <div id="sync-progress" class="progress-bar" role="progressbar" style="width: 0%"></div>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 保守同步设置模态框 -->
+<div class="modal fade" id="conservativeSyncModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-shield-check"></i>
+                    保守模式同步设置
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle"></i> 保守模式特点：</h6>
+                    <ul class="mb-0">
+                        <li>单线程处理，避免API压力过大</li>
+                        <li>智能延迟调整（2-15秒）</li>
+                        <li>自动跳过最近1小时内已更新的用户</li>
+                        <li>每5个用户休息1分钟</li>
+                        <li>成功率约100%，处理速度约29秒/用户</li>
+                    </ul>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="conservativeStartPos" class="form-label">开始位置：</label>
+                        <input type="number" class="form-control" id="conservativeStartPos" value="1" min="1">
+                        <small class="form-text text-muted">从第几个用户开始处理</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="conservativeCount" class="form-label">处理数量：</label>
+                        <input type="number" class="form-control" id="conservativeCount" placeholder="留空处理全部">
+                        <small class="form-text text-muted">留空则处理所有用户</small>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="conservativeConfirm">
+                        <label class="form-check-label" for="conservativeConfirm">
+                            我了解保守模式的特点，同意开始同步
+                        </label>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning mt-3">
+                    <small><strong>预估时间：</strong>根据用户数量，完整同步可能需要数小时。建议分批处理。</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-success" onclick="startConservativeSync()">
+                    <i class="bi bi-shield-check"></i>
+                    开始保守同步
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 超级保守同步设置模态框 -->
+<div class="modal fade" id="ultraConservativeSyncModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-shield-lock"></i>
+                    超级保守模式同步设置
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-warning">
+                    <h6><i class="bi bi-exclamation-triangle"></i> 超级保守模式特点：</h6>
+                    <ul class="mb-0">
+                        <li>极低频率处理，最大程度避免风控</li>
+                        <li>长延迟时间（8-30秒）</li>
+                        <li>自动跳过最近6小时内已更新的用户</li>
+                        <li>每10个用户休息2分钟</li>
+                        <li>成功率约100%，处理速度约47秒/用户</li>
+                        <li>适合在严重风控环境下使用</li>
+                    </ul>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <label for="ultraStartPos" class="form-label">开始位置：</label>
+                        <input type="number" class="form-control" id="ultraStartPos" value="1" min="1">
+                        <small class="form-text text-muted">从第几个用户开始处理</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="ultraCount" class="form-label">处理数量：</label>
+                        <input type="number" class="form-control" id="ultraCount" placeholder="留空处理全部" max="100">
+                        <small class="form-text text-muted">建议单次不超过100个用户</small>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="ultraConfirm">
+                        <label class="form-check-label" for="ultraConfirm">
+                            我了解超级保守模式将使用极长时间，同意开始同步
+                        </label>
+                    </div>
+                </div>
+
+                <div class="alert alert-danger mt-3">
+                    <small><strong>⚠️ 时间警告：</strong>超级保守模式速度极慢，100个用户约需1.3小时，1000个用户约需13小时！</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" onclick="startUltraConservativeSync()">
+                    <i class="bi bi-shield-lock"></i>
+                    开始超级保守同步
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 保守同步进度模态框 -->
+<div class="modal fade" id="conservativeSyncProgressModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-shield-check"></i>
+                    <span id="conservativeSyncModeTitle">保守模式同步进度</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"
+                    onclick="cancelConservativeSync()"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center mb-4">
+                    <div class="spinner-border text-primary mb-3" role="status" id="conservativeSyncSpinner">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p id="conservativeSyncStatus" class="h6">准备开始保守同步...</p>
+                    <p id="conservativeSyncCurrentUser" class="text-muted"></p>
+                </div>
+
+                <div class="progress mb-3">
+                    <div id="conservativeSyncProgress" class="progress-bar progress-bar-striped progress-bar-animated"
+                        role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                        0%
+                    </div>
+                </div>
+
+                <div class="row text-center">
+                    <div class="col-3">
+                        <div class="badge bg-success fs-6">
+                            成功: <span id="conservativeSuccessCount">0</span>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="badge bg-danger fs-6">
+                            失败: <span id="conservativeFailedCount">0</span>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="badge bg-warning fs-6">
+                            跳过: <span id="conservativeSkippedCount">0</span>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="badge bg-info fs-6">
+                            总计: <span id="conservativeTotalCount">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-3">
+                    <small class="text-muted">
+                        <div>任务ID: <span id="conservativeTaskId">-</span></div>
+                        <div>开始时间: <span id="conservativeStartTime">-</span></div>
+                        <div>已用时间: <span id="conservativeElapsedTime">-</span></div>
+                    </small>
+                </div>
+
+                <div class="alert alert-info mt-3" id="conservativeEstimatedTime" style="display: none;">
+                    <small><strong>预估完成时间：</strong><span id="conservativeTimeEstimate">计算中...</span></small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-danger" onclick="cancelConservativeSync()">
+                    <i class="bi bi-stop-circle"></i>
+                    停止同步
+                </button>
+                <button type="button" class="btn btn-info" onclick="exportSyncReport()" style="display: none;"
+                    id="conservativeExportBtn">
+                    <i class="bi bi-download"></i>
+                    导出报告
+                </button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" style="display: none;"
+                    id="conservativeSyncCloseBtn">
+                    <i class="bi bi-check-circle"></i>
+                    关闭
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 同步选项模态框 -->
+<div class="modal fade" id="syncOptionsModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-rocket-takeoff"></i>
+                    一键更新所有信息
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle"></i> 功能说明</h6>
+                    <p class="mb-0">一键更新将依次执行：关注列表同步、分组信息、用户统计、等级信息和自动分类。整个过程可能需要5-10分钟。</p>
+                </div>
+
+                <h6><i class="bi bi-gear"></i> 选择同步模式</h6>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 border-primary">
+                            <div class="card-body text-center">
+                                <i class="bi bi-rocket display-4 text-primary mb-3"></i>
+                                <h6 class="card-title">标准模式</h6>
+                                <p class="card-text small">常规速度，平衡性能和稳定性，适合大多数情况</p>
+                                <button class="btn btn-primary" onclick="startOneClickUpdate('standard')">
+                                    选择标准模式
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 border-success">
+                            <div class="card-body text-center">
+                                <i class="bi bi-shield-check display-4 text-success mb-3"></i>
+                                <h6 class="card-title">保守模式 <span class="badge bg-success">推荐</span></h6>
+                                <p class="card-text small">较慢但更安全，减少风控风险，推荐使用</p>
+                                <button class="btn btn-success" onclick="startOneClickUpdate('conservative')">
+                                    选择保守模式
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning mt-3">
+                    <small><strong>💡 建议：</strong>首次使用或关注数量较多时，建议选择保守模式以降低风控风险。</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 快速同步模态框 -->
+<div class="modal fade" id="quickSyncModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    快速同步选项
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="alert alert-info">
+                    <h6><i class="bi bi-info-circle"></i> 选择同步内容</h6>
+                    <p class="mb-0">您可以单独同步特定的数据类型，或选择不同的同步模式。</p>
+                </div>
+
+                <h6><i class="bi bi-list-task"></i> 单项同步</h6>
+                <div class="row mb-4">
+                    <div class="col-md-6 mb-3">
+                        <div class="d-grid">
+                            <button class="btn btn-outline-primary" onclick="startStandardSync()">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                标准同步关注列表
+                            </button>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="d-grid">
+                            <button class="btn btn-outline-info" onclick="syncUserStats()">
+                                <i class="bi bi-bar-chart"></i>
+                                同步用户统计数据
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <h6><i class="bi bi-shield"></i> 保守同步模式</h6>
+                <div class="row">
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 border-success">
+                            <div class="card-body text-center">
+                                <i class="bi bi-shield-check display-6 text-success mb-2"></i>
+                                <h6 class="card-title">保守模式</h6>
+                                <p class="card-text small">适中的安全性和速度</p>
+                                <button class="btn btn-success btn-sm" onclick="showConservativeSyncDialog()">
+                                    启动保守同步
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mb-3">
+                        <div class="card h-100 border-warning">
+                            <div class="card-body text-center">
+                                <i class="bi bi-shield-lock display-6 text-warning mb-2"></i>
+                                <h6 class="card-title">超级保守模式</h6>
+                                <p class="card-text small">最高安全性，速度较慢</p>
+                                <button class="btn btn-warning btn-sm" onclick="showUltraConservativeSyncDialog()">
+                                    启动超级保守
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-warning mt-3">
+                    <small><strong>⏱️ 时间参考：</strong>保守模式约为标准模式的2-3倍时间，超级保守模式约为10-15倍时间。</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
             </div>
         </div>
     </div>

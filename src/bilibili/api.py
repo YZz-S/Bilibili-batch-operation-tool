@@ -489,37 +489,66 @@ class BilibiliAPI:
                 if vlist:
                     latest_video = vlist[0]  # 第一个是最新的
                     stats["last_video_time"] = latest_video.get('created', 0)
-                    stats["total_views"] = sum(v.get('play', 0) for v in vlist)
+                    
+                    # 计算总播放量 - 遍历前几页获取更准确的数据
+                    total_views = 0
+                    for video in vlist:
+                        total_views += video.get('play', 0)
+                    
+                    # 如果只有一页数据，可能需要获取更多页来计算总播放量
+                    # 但为了避免API调用过多，这里只使用当前页的数据
+                    stats["total_views"] = total_views
             
             # 如果无法获取视频列表但有视频数量，使用估算的活跃度
             elif stats["video_count"] > 0:
-                # 无法获取最新视频时间，使用保守的活跃度
-                stats["activity_score"] = 0.4  # 中等活跃度
+                # 无法获取最新视频时间，根据视频数量估算活跃度
+                if stats["video_count"] > 100:
+                    stats["activity_score"] = 0.6  # 高产用户
+                elif stats["video_count"] > 20:
+                    stats["activity_score"] = 0.4  # 中等产出
+                else:
+                    stats["activity_score"] = 0.3  # 低产用户
                 
-                # 计算活跃度分数（基于视频数量、发布频率等）
-                if stats["video_count"] > 0:
-                    import time
-                    current_time = int(time.time())
-                    
-                    # 基于最后视频时间计算活跃度
-                    if stats["last_video_time"] > 0:
-                        days_since_last = (current_time - stats["last_video_time"]) / (24 * 3600)
-                        if days_since_last <= 7:
-                            activity_score = 0.9
-                        elif days_since_last <= 30:
-                            activity_score = 0.7
-                        elif days_since_last <= 90:
-                            activity_score = 0.5
-                        else:
-                            activity_score = 0.3
-                        
-                        # 根据视频数量调整
-                        if stats["video_count"] > 100:
-                            activity_score += 0.1
-                        elif stats["video_count"] < 10:
-                            activity_score -= 0.1
-                        
-                        stats["activity_score"] = max(0.1, min(0.9, activity_score))
+            # 重新计算活跃度分数（基于最后视频时间和视频数量）
+            if stats["last_video_time"] > 0:
+                import time
+                current_time = int(time.time())
+                days_since_last = (current_time - stats["last_video_time"]) / (24 * 3600)
+                
+                # 基于最后视频时间的基础活跃度
+                if days_since_last <= 7:
+                    base_activity = 0.9
+                elif days_since_last <= 30:
+                    base_activity = 0.7
+                elif days_since_last <= 90:
+                    base_activity = 0.5
+                elif days_since_last <= 180:
+                    base_activity = 0.3
+                else:
+                    base_activity = 0.1
+                
+                # 根据视频数量调整
+                if stats["video_count"] > 200:
+                    activity_adjustment = 0.15
+                elif stats["video_count"] > 100:
+                    activity_adjustment = 0.1
+                elif stats["video_count"] > 50:
+                    activity_adjustment = 0.05
+                elif stats["video_count"] < 10:
+                    activity_adjustment = -0.1
+                else:
+                    activity_adjustment = 0
+                
+                # 根据播放量调整（如果有的话）
+                if stats["total_views"] > 10000000:  # 1000万以上
+                    view_adjustment = 0.1
+                elif stats["total_views"] > 1000000:  # 100万以上
+                    view_adjustment = 0.05
+                else:
+                    view_adjustment = 0
+                
+                final_activity = base_activity + activity_adjustment + view_adjustment
+                stats["activity_score"] = max(0.1, min(0.9, final_activity))
             
             self.logger.info(f"✅ 用户 {uid} 统计信息获取成功: 粉丝{stats['fans_count']}, 视频{stats['video_count']}, 活跃度{stats['activity_score']}")
             return stats
