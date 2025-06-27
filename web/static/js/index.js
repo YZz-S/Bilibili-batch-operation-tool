@@ -3,11 +3,85 @@
  * Index Page JavaScript
  */
 
+// 全局变量
+let currentTaskId = null;
+let currentTaskMode = 'standard';
+let currentTaskControlState = 'running';
+
+// 添加服务状态监控
+let serviceStatusChecker = null;
+
+function startServiceStatusMonitor() {
+    // 如果已经有监控在运行，先停止它
+    if (serviceStatusChecker) {
+        clearInterval(serviceStatusChecker);
+    }
+
+    serviceStatusChecker = setInterval(async () => {
+        try {
+            const response = await fetch('/api/bilibili/status', {
+                method: 'GET',
+                timeout: 5000  // 5秒超时
+            });
+
+            if (!response.ok) {
+                throw new Error(`Service status check failed: ${response.status}`);
+            }
+
+            // 服务正常，更新UI状态（如果需要）
+            const statusElements = document.querySelectorAll('.service-status-indicator');
+            statusElements.forEach(el => {
+                el.classList.remove('text-danger', 'text-warning');
+                el.classList.add('text-success');
+                el.textContent = '服务正常';
+            });
+
+        } catch (error) {
+            console.error('Service status check failed:', error);
+
+            // 服务异常，更新UI状态
+            const statusElements = document.querySelectorAll('.service-status-indicator');
+            statusElements.forEach(el => {
+                el.classList.remove('text-success', 'text-warning');
+                el.classList.add('text-danger');
+                el.textContent = '服务异常';
+            });
+
+            // 如果有正在进行的任务，显示警告
+            if (window.currentPollingTaskId) {
+                addLogEntry('警告', '⚠️ 检测到服务连接不稳定，任务可能受到影响');
+            }
+        }
+    }, 30000); // 每30秒检查一次
+}
+
+function stopServiceStatusMonitor() {
+    if (serviceStatusChecker) {
+        clearInterval(serviceStatusChecker);
+        serviceStatusChecker = null;
+    }
+}
+
 // 页面加载完成后初始化
 document.addEventListener('DOMContentLoaded', function () {
-    loadDashboardData();
-    initializeCharts();
+    // 清理可能的遗留状态
+    window.currentPollingTaskId = null;
+    if (window.progressTimer) {
+        clearInterval(window.progressTimer);
+        window.progressTimer = null;
+    }
+
+    // 设置事件监听器
     setupEventListeners();
+
+    // 启动服务状态监控
+    startServiceStatusMonitor();
+
+    // 加载仪表盘数据
+    loadDashboardData();
+
+    // 加载最后更新信息
+    loadLastUpdatedInfo();
 
     // 设置自动刷新（每60秒检查一次）
     setInterval(function () {
@@ -57,7 +131,23 @@ async function startOneClickUpdate(mode = 'standard') {
         modal.hide();
     }
 
-    if (!confirm(`确定要执行一键更新吗？将使用${mode === 'conservative' ? '保守' : '标准'}模式，整个过程可能需要5-10分钟。`)) {
+    // 使用默认预估时间，避免启动时的API调用导致风控
+    let estimatedTime = '';
+    if (mode === 'conservative') {
+        estimatedTime = '数小时';
+    } else if (mode === 'optimized') {
+        estimatedTime = '30分钟-2小时（优化版）';
+    } else {
+        estimatedTime = '1-3小时';
+    }
+
+    const modeNames = {
+        'standard': '标准',
+        'conservative': '保守',
+        'optimized': '优化'
+    };
+
+    if (!confirm(`确定要执行一键更新吗？将使用${modeNames[mode]}模式，预计需要${estimatedTime}。`)) {
         return;
     }
 
@@ -65,9 +155,18 @@ async function startOneClickUpdate(mode = 'standard') {
         // 显示全屏进度界面
         showFullScreenProgress();
 
-        showMessage(`正在启动一键更新任务（${mode === 'conservative' ? '保守' : '标准'}模式）...`, 'info');
+        showMessage(`正在启动一键更新任务（${modeNames[mode]}模式）...`, 'info');
 
-        const response = await fetch('/api/bilibili/one-click-update', {
+        let endpoint;
+        if (mode === 'conservative') {
+            endpoint = '/api/bilibili/one-click-update-conservative';
+        } else if (mode === 'optimized') {
+            endpoint = '/api/bilibili/one-click-update-optimized';
+        } else {
+            endpoint = '/api/bilibili/one-click-update';
+        }
+
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -80,18 +179,38 @@ async function startOneClickUpdate(mode = 'standard') {
         const result = await response.json();
 
         if (response.ok) {
-            showMessage(`一键更新任务已启动！正在后台执行（${mode === 'conservative' ? '保守' : '标准'}模式），预计需要5-10分钟。`, 'success');
+            // 设置当前任务ID和模式
+            currentTaskId = result.task_id;
+            currentTaskMode = mode;
+            currentTaskControlState = 'running';
+
+            let successMessage = `一键更新任务已启动！正在后台执行（${modeNames[mode]}模式），预计需要${estimatedTime}。`;
+
+            if (mode === 'optimized' && result.optimization_features) {
+                successMessage += '\n\n🚀 启用的优化功能：\n' + result.optimization_features.map(feature => '• ' + feature).join('\n');
+            }
+
+            showMessage(successMessage, 'success');
 
             // 发送启动通知
             if (window.BilibiliTool && window.BilibiliTool.sendInfoNotification) {
                 window.BilibiliTool.sendInfoNotification(
                     '一键更新已启动',
-                    `${mode === 'conservative' ? '保守' : '标准'}模式执行中，预计需要5-10分钟`
+                    `${modeNames[mode]}模式执行中，预计需要${estimatedTime}`
                 );
             }
 
             // 初始化进度界面
             initializeProgressInterface();
+            showTaskControls(); // 显示任务控制按钮
+
+            // 设置初始状态
+            const statusElement = document.getElementById('taskStatus');
+            if (statusElement) {
+                statusElement.textContent = '正在初始化...';
+                statusElement.className = 'text-info';
+            }
+
             startProgressPolling(result.task_id);
 
         } else {
@@ -1178,9 +1297,17 @@ function showFullScreenProgress() {
                                        状态: <span id="taskStatus" class="text-warning">执行中</span>
                                 </small>
                             </div>
-                            <button class="btn btn-outline-danger btn-sm d-none" id="stopTaskBtn" onclick="stopUpdate()">
-                                <i class="bi bi-stop-circle"></i> 停止任务
-                            </button>
+                            <div id="taskControlsContainer" style="display: none;" class="me-3">
+                                <button class="btn btn-outline-warning btn-sm me-2" id="pauseTaskBtn" onclick="controlTask('pause')">
+                                    <i class="bi bi-pause-circle"></i> 暂停
+                                </button>
+                                <button class="btn btn-outline-success btn-sm me-2 d-none" id="resumeTaskBtn" onclick="controlTask('resume')">
+                                    <i class="bi bi-play-circle"></i> 继续
+                                </button>
+                                <button class="btn btn-outline-danger btn-sm" id="stopTaskBtn" onclick="controlTask('stop')">
+                                    <i class="bi bi-stop-circle"></i> 停止
+                                </button>
+                            </div>
                             <button class="btn btn-outline-light btn-sm d-none" id="closeProgressBtn" onclick="hideFullScreenProgress()">
                                 <i class="bi bi-x-lg"></i> 关闭
                             </button>
@@ -1230,9 +1357,31 @@ function initializeProgressInterface() {
  * 开始进度轮询
  */
 function startProgressPolling(taskId) {
+    // 清理之前的轮询
+    if (window.progressTimer) {
+        clearInterval(window.progressTimer);
+    }
+
+    // 记录当前任务ID
+    window.currentPollingTaskId = taskId;
+
     const pollProgress = async () => {
         try {
-            const response = await fetch(`/api/bilibili/one-click-update/${taskId}`);
+            // 检查是否还是当前任务（避免多任务冲突）
+            if (window.currentPollingTaskId !== taskId) {
+                console.log(`任务 ${taskId} 已不是当前任务，停止轮询`);
+                return;
+            }
+
+            // 根据任务模式选择不同的轮询端点
+            let endpoint = `/api/bilibili/one-click-update/${taskId}`;
+            if (currentTaskMode === 'optimized') {
+                endpoint = `/api/bilibili/one-click-update-optimized/${taskId}`;
+            } else if (currentTaskMode === 'conservative') {
+                endpoint = `/api/bilibili/one-click-update-conservative/${taskId}`;
+            }
+
+            const response = await fetch(endpoint);
             if (response.ok) {
                 const data = await response.json();
                 updateProgressInterface(data);
@@ -1244,13 +1393,72 @@ function startProgressPolling(taskId) {
                     // 任务完成或失败
                     handleTaskComplete(data);
                 }
+            } else if (response.status === 404) {
+                // 处理404错误
+                try {
+                    const errorData = await response.json();
+                    console.warn('任务404错误:', errorData);
+
+                    if (errorData.detail && errorData.detail.available_tasks) {
+                        const availableTasks = errorData.detail.available_tasks;
+                        if (availableTasks.length > 0) {
+                            addLogEntry('系统', `当前任务已过期，发现其他活跃任务: ${availableTasks.join(', ')}`);
+                        } else {
+                            addLogEntry('系统', '任务已过期或服务已重启，请刷新页面重新开始');
+                        }
+                    } else {
+                        addLogEntry('系统', `任务 ${taskId} 不存在或已过期`);
+                    }
+
+                    // 显示友好的错误信息
+                    document.getElementById('taskStatus').textContent = '任务已过期';
+                    document.getElementById('taskStatus').className = 'text-warning';
+                    addLogEntry('错误', '任务已过期，请刷新页面重新启动任务');
+
+                    // 停止轮询
+                    return;
+
+                } catch (parseError) {
+                    addLogEntry('错误', `任务查询失败: 404 - 任务不存在或已过期`);
+                }
             } else {
-                throw new Error('获取进度失败');
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
         } catch (error) {
             console.error('轮询进度失败:', error);
+
+            // 检查是否是连接被拒绝（服务关闭）
+            if (error.message.includes('Failed to fetch') ||
+                error.message.includes('CONNECTION_REFUSED') ||
+                error.message.includes('fetch')) {
+
+                // 检查服务是否完全不可用
+                try {
+                    const healthCheck = await fetch('/api/bilibili/status');
+                    if (!healthCheck.ok) {
+                        throw new Error('Service unavailable');
+                    }
+                } catch (healthError) {
+                    // 服务确实不可用，显示明确的错误信息并停止轮询
+                    document.getElementById('taskStatus').textContent = '服务连接中断';
+                    document.getElementById('taskStatus').className = 'text-danger';
+
+                    addLogEntry('错误', '⚠️ 服务连接中断！可能的原因：');
+                    addLogEntry('', '  • 后台服务意外关闭');
+                    addLogEntry('', '  • 遇到严重的API风控限制');
+                    addLogEntry('', '  • 网络连接问题');
+                    addLogEntry('解决方案', '请重新启动应用程序，然后刷新页面重试');
+
+                    // 停止轮询，避免无意义的重试
+                    window.currentPollingTaskId = null;
+                    hideTaskControls();
+                    return;
+                }
+            }
+
             addLogEntry('错误', `轮询进度失败: ${error.message}`);
-            // 继续尝试轮询
+
+            // 网络错误时继续尝试轮询，但增加间隔
             setTimeout(pollProgress, 5000);
         }
     };
@@ -1269,11 +1477,14 @@ function updateProgressInterface(data) {
     document.getElementById('overallProgressBar').style.width = `${progress}%`;
     document.getElementById('overallProgressText').textContent = `${Math.round(progress)}%`;
 
+    // 动态更新预估时间
+    updateEstimatedTime(data);
+
     // 更新各步骤状态
-    updateStepStatus('following', data.steps?.following_sync);
+    updateStepStatus('following', data.steps?.sync_following);
     updateStepStatus('groups', data.steps?.groups_sync);
-    updateStepStatus('stats', data.steps?.user_stats);
-    updateStepStatus('levels', data.steps?.level_fix);
+    updateStepStatus('stats', data.steps?.sync_user_stats);
+    updateStepStatus('levels', data.steps?.fix_levels);
     updateStepStatus('categorize', data.steps?.auto_categorize);
 
     // 添加日志条目
@@ -1284,12 +1495,73 @@ function updateProgressInterface(data) {
                     if (!window.displayedLogs) window.displayedLogs = new Set();
                     const logKey = `${stepName}-${log}`;
                     if (!window.displayedLogs.has(logKey)) {
-                        addLogEntry(getStepDisplayName(stepName), log);
+                        // 检查是否是特殊格式的日志（包含时间戳和图标）
+                        if (log.includes('🚀') || log.includes('✅') || log.includes('❌') ||
+                            log.includes('⏸️') || log.includes('▶️') || log.includes('⚡')) {
+                            // 直接添加特殊格式的日志，不添加额外的分类前缀
+                            addLogEntry('', log);
+                        } else {
+                            // 普通日志保持原有格式
+                            addLogEntry(getStepDisplayName(stepName), log);
+                        }
                         window.displayedLogs.add(logKey);
                     }
                 });
             }
         });
+    }
+}
+
+/**
+ * 动态更新预估时间
+ */
+function updateEstimatedTime(data) {
+    const overall = data.overall || {};
+    const steps = data.steps || {};
+
+    // 只有在关注同步步骤完成后才能准确计算预估时间
+    const followingSync = steps.sync_following;
+    if (followingSync && followingSync.status === 'completed' && followingSync.details) {
+        const totalUsers = followingSync.details.total || followingSync.details.processed;
+        const startTime = overall.start_time;
+        const currentTime = new Date().toISOString();
+
+        if (totalUsers && startTime) {
+            try {
+                const start = new Date(startTime);
+                const now = new Date(currentTime);
+                const elapsedMinutes = (now - start) / (1000 * 60);
+                const progress = overall.progress || 0;
+
+                if (progress > 0 && elapsedMinutes > 0) {
+                    const totalMinutes = (elapsedMinutes / progress) * 100;
+                    const remainingMinutes = Math.max(0, totalMinutes - elapsedMinutes);
+
+                    let estimatedTime;
+                    if (remainingMinutes < 1) {
+                        estimatedTime = "少于1分钟";
+                    } else if (remainingMinutes >= 60) {
+                        const hours = Math.floor(remainingMinutes / 60);
+                        const minutes = Math.round(remainingMinutes % 60);
+                        if (minutes === 0) {
+                            estimatedTime = `约${hours}小时`;
+                        } else {
+                            estimatedTime = `约${hours}小时${minutes}分钟`;
+                        }
+                    } else {
+                        estimatedTime = `约${Math.round(remainingMinutes)}分钟`;
+                    }
+
+                    // 更新状态显示
+                    const statusElement = document.getElementById('taskStatus');
+                    if (statusElement && overall.status === 'running') {
+                        statusElement.textContent = `执行中 (剩余${estimatedTime})`;
+                    }
+                }
+            } catch (error) {
+                console.error('计算动态预估时间失败:', error);
+            }
+        }
     }
 }
 
@@ -1341,10 +1613,10 @@ function updateStepStatus(stepName, stepData) {
  */
 function getStepDisplayName(stepName) {
     const names = {
-        'following_sync': '关注同步',
+        'sync_following': '关注同步',
         'groups_sync': '分组同步',
-        'user_stats': '统计同步',
-        'level_fix': '等级修复',
+        'sync_user_stats': '统计同步',
+        'fix_levels': '等级修复',
         'auto_categorize': '自动分类'
     };
     return names[stepName] || stepName;
@@ -1360,16 +1632,22 @@ function addLogEntry(category, message) {
     const timestamp = new Date().toLocaleTimeString();
     const logEntry = document.createElement('div');
     logEntry.className = 'log-entry px-3 py-1';
-    logEntry.innerHTML = `
-        <span class="text-muted">[${timestamp}]</span>
-        <span class="text-info">[${category}]</span>
-        <span class="text-light">${message}</span>
-    `;
+
+    // 如果category为空，说明message已经包含完整格式，直接显示
+    if (!category || category.trim() === '') {
+        logEntry.innerHTML = `<span class="text-light">${message}</span>`;
+    } else {
+        logEntry.innerHTML = `
+            <span class="text-muted">[${timestamp}]</span>
+            <span class="text-info">[${category}]</span>
+            <span class="text-light">${message}</span>
+        `;
+    }
 
     logContainer.appendChild(logEntry);
 
     // 自动滚动到底部
-    if (window.autoScroll) {
+    if (window.autoScroll !== false) {
         logContainer.scrollTop = logContainer.scrollHeight;
     }
 }
@@ -1379,6 +1657,7 @@ function addLogEntry(category, message) {
  */
 function handleTaskComplete(data) {
     clearInterval(window.progressTimer);
+    window.currentPollingTaskId = null; // 清理轮询任务ID
 
     const overall = data.overall || {};
     const summary = data.summary || {};
@@ -1387,7 +1666,61 @@ function handleTaskComplete(data) {
         document.getElementById('taskStatus').textContent = '已完成';
         document.getElementById('taskStatus').className = 'text-success';
 
-        addLogEntry('系统', `所有任务已完成! 耗时: ${summary.duration || '未知'}`);
+        // 计算实际耗时
+        let duration = '未知';
+        if (data.start_time && data.end_time) {
+            try {
+                const startTime = new Date(data.start_time);
+                const endTime = new Date(data.end_time);
+                const durationMs = endTime - startTime;
+                const durationSeconds = Math.floor(durationMs / 1000);
+
+                if (durationSeconds < 60) {
+                    duration = `${durationSeconds}秒`;
+                } else if (durationSeconds < 3600) {
+                    const minutes = Math.floor(durationSeconds / 60);
+                    const seconds = durationSeconds % 60;
+                    duration = `${minutes}分${seconds}秒`;
+                } else {
+                    const hours = Math.floor(durationSeconds / 3600);
+                    const minutes = Math.floor((durationSeconds % 3600) / 60);
+                    duration = `${hours}小时${minutes}分钟`;
+                }
+            } catch (e) {
+                console.error('计算耗时失败:', e);
+                // 使用total_duration作为备选
+                if (data.total_duration) {
+                    const seconds = Math.floor(data.total_duration);
+                    if (seconds < 60) {
+                        duration = `${seconds}秒`;
+                    } else if (seconds < 3600) {
+                        const minutes = Math.floor(seconds / 60);
+                        const remainingSeconds = seconds % 60;
+                        duration = `${minutes}分${remainingSeconds}秒`;
+                    } else {
+                        const hours = Math.floor(seconds / 3600);
+                        const minutes = Math.floor((seconds % 3600) / 60);
+                        duration = `${hours}小时${minutes}分钟`;
+                    }
+                }
+            }
+        } else if (data.total_duration) {
+            // 直接使用total_duration
+            const seconds = Math.floor(data.total_duration);
+            if (seconds < 60) {
+                duration = `${seconds}秒`;
+            } else if (seconds < 3600) {
+                const minutes = Math.floor(seconds / 60);
+                const remainingSeconds = seconds % 60;
+                duration = `${minutes}分${remainingSeconds}秒`;
+            } else {
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                duration = `${hours}小时${minutes}分钟`;
+            }
+        }
+
+        addLogEntry('系统', `所有任务已完成! 耗时: ${duration}`);
         if (summary.details) {
             addLogEntry('系统', `执行结果: ${summary.details}`);
         }
@@ -1419,6 +1752,13 @@ function handleTaskComplete(data) {
             );
         }
     }
+
+    // 隐藏任务控制按钮
+    hideTaskControls();
+
+    // 清理任务状态
+    currentTaskId = null;
+    currentTaskControlState = 'running';
 
     // 显示关闭按钮
     document.getElementById('closeProgressBtn')?.classList.remove('d-none');
@@ -2288,4 +2628,94 @@ window.startUltraConservativeSync = startUltraConservativeSync;
 window.cancelConservativeSync = cancelConservativeSync;
 window.toggleFailedUserList = toggleFailedUserList;
 window.toggleSkippedUserList = toggleSkippedUserList;
-window.exportSyncReport = exportSyncReport; 
+window.exportSyncReport = exportSyncReport;
+window.controlTask = controlTask;
+window.updateControlButtons = updateControlButtons;
+window.showTaskControls = showTaskControls;
+window.hideTaskControls = hideTaskControls;
+
+// 任务控制相关函数
+
+/**
+ * 控制任务（暂停/继续/停止）
+ */
+async function controlTask(action) {
+    if (!currentTaskId) {
+        showMessage('没有正在运行的任务', 'warning');
+        return;
+    }
+
+    try {
+        const response = await fetch(`/api/bilibili/one-click-update/${currentTaskId}/control`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                task_id: currentTaskId,
+                action: action
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            currentTaskControlState = action;
+            updateControlButtons(action);
+
+            const actionNames = {
+                'pause': '暂停',
+                'resume': '继续',
+                'stop': '停止'
+            };
+            showMessage(`任务已${actionNames[action]}`, 'success');
+
+            // 添加控制日志
+            const timestamp = new Date().toLocaleTimeString();
+            const logMessage = `⚡ [${timestamp}] [系统] 用户${actionNames[action]}了任务`;
+            addLogEntry('系统', logMessage);
+
+        } else {
+            throw new Error(result.error || `${action}任务失败`);
+        }
+    } catch (error) {
+        console.error(`${action}任务失败:`, error);
+        showMessage(`${action}任务失败: ` + error.message, 'danger');
+    }
+}
+
+/**
+ * 更新控制按钮状态
+ */
+function updateControlButtons(state) {
+    const pauseBtn = document.getElementById('pauseTaskBtn');
+    const resumeBtn = document.getElementById('resumeTaskBtn');
+    const stopBtn = document.getElementById('stopTaskBtn');
+
+    if (pauseBtn && resumeBtn && stopBtn) {
+        pauseBtn.style.display = state === 'running' ? 'inline-block' : 'none';
+        resumeBtn.style.display = state === 'pause' ? 'inline-block' : 'none';
+        stopBtn.style.display = (state === 'running' || state === 'pause') ? 'inline-block' : 'none';
+    }
+}
+
+/**
+ * 显示任务控制按钮
+ */
+function showTaskControls() {
+    const controlsContainer = document.getElementById('taskControlsContainer');
+    if (controlsContainer) {
+        controlsContainer.style.display = 'block';
+        updateControlButtons('running');
+    }
+}
+
+/**
+ * 隐藏任务控制按钮
+ */
+function hideTaskControls() {
+    const controlsContainer = document.getElementById('taskControlsContainer');
+    if (controlsContainer) {
+        controlsContainer.style.display = 'none';
+    }
+}

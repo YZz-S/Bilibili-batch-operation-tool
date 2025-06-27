@@ -254,7 +254,7 @@
             </div>
             <div class="card-body">
                 <div class="d-grid gap-3">
-                    <button class="btn btn-primary" onclick="oneClickUpdate()">
+                    <button class="btn btn-primary" onclick="showSyncOptionsModal()">
                         <i class="bi bi-rocket-takeoff"></i>
                         一键更新所有信息
                     </button>
@@ -574,7 +574,7 @@
 
                 <h6><i class="bi bi-gear"></i> 选择同步模式</h6>
                 <div class="row">
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <div class="card h-100 border-primary">
                             <div class="card-body text-center">
                                 <i class="bi bi-rocket display-4 text-primary mb-3"></i>
@@ -586,7 +586,7 @@
                             </div>
                         </div>
                     </div>
-                    <div class="col-md-6 mb-3">
+                    <div class="col-md-4 mb-3">
                         <div class="card h-100 border-success">
                             <div class="card-body text-center">
                                 <i class="bi bi-shield-check display-4 text-success mb-3"></i>
@@ -594,6 +594,18 @@
                                 <p class="card-text small">较慢但更安全，减少风控风险，推荐使用</p>
                                 <button class="btn btn-success" onclick="startOneClickUpdate('conservative')">
                                     选择保守模式
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100 border-warning">
+                            <div class="card-body text-center">
+                                <i class="bi bi-lightning-charge display-4 text-warning mb-3"></i>
+                                <h6 class="card-title">优化模式 <span class="badge bg-warning">新功能</span></h6>
+                                <p class="card-text small">智能优化算法，并发处理，速度更快，节省30-50%时间</p>
+                                <button class="btn btn-warning" onclick="startOneClickUpdate('optimized')">
+                                    选择优化模式
                                 </button>
                             </div>
                         </div>
