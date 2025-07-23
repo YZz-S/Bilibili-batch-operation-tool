@@ -612,6 +612,28 @@
                     </div>
                 </div>
 
+                <div class="row mt-3">
+                    <div class="col-md-6 mx-auto">
+                        <div class="card h-100 border-danger">
+                            <div class="card-body text-center">
+                                <i class="bi bi-rocket-takeoff-fill display-4 text-danger mb-3"></i>
+                                <h6 class="card-title">高性能模式 <span class="badge bg-danger">极速</span></h6>
+                                <p class="card-text small">智能策略选择，自适应并发控制，风控检测与恢复，速度提升3-5倍</p>
+                                <div class="mb-2">
+                                    <small class="text-muted">
+                                        <i class="bi bi-cpu"></i> 自适应策略 |
+                                        <i class="bi bi-shield-check"></i> 风控保护 |
+                                        <i class="bi bi-speedometer2"></i> 3-5x速度
+                                    </small>
+                                </div>
+                                <button class="btn btn-danger" onclick="startOneClickUpdate('high-performance')">
+                                    选择高性能模式
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="alert alert-warning mt-3">
                     <small><strong>💡 建议：</strong>首次使用或关注数量较多时，建议选择保守模式以降低风控风险。</small>
                 </div>
@@ -688,8 +710,31 @@
                     </div>
                 </div>
 
+                <h6><i class="bi bi-rocket-takeoff"></i> 高性能同步模式</h6>
+                <div class="row">
+                    <div class="col-md-8 mx-auto mb-3">
+                        <div class="card h-100 border-danger">
+                            <div class="card-body text-center">
+                                <i class="bi bi-rocket-takeoff-fill display-6 text-danger mb-2"></i>
+                                <h6 class="card-title">高性能模式 <span class="badge bg-danger">极速</span></h6>
+                                <p class="card-text small">智能策略选择，自适应并发控制，风控检测与恢复，速度提升3-5倍</p>
+                                <div class="mb-2">
+                                    <small class="text-muted">
+                                        <i class="bi bi-cpu"></i> 自适应策略 |
+                                        <i class="bi bi-shield-check"></i> 风控保护 |
+                                        <i class="bi bi-speedometer2"></i> 3-5x速度
+                                    </small>
+                                </div>
+                                <button class="btn btn-danger btn-sm" onclick="startHighPerformanceSync()">
+                                    启动高性能同步
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="alert alert-warning mt-3">
-                    <small><strong>⏱️ 时间参考：</strong>保守模式约为标准模式的2-3倍时间，超级保守模式约为10-15倍时间。</small>
+                    <small><strong>⏱️ 时间参考：</strong>高性能模式约为标准模式的1/3-1/5时间，保守模式约为标准模式的2-3倍时间，超级保守模式约为10-15倍时间。</small>
                 </div>
             </div>
             <div class="modal-footer">

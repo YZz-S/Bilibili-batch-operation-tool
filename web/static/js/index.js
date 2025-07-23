@@ -11,6 +11,144 @@ let currentTaskControlState = 'running';
 // 添加服务状态监控
 let serviceStatusChecker = null;
 
+/**
+ * 启动一键更新（带模式选择）
+ */
+async function startOneClickUpdate(mode = 'standard') {
+    // 关闭模态框
+    const modal = bootstrap.Modal.getInstance(document.getElementById('syncOptionsModal'));
+    if (modal) {
+        modal.hide();
+    }
+
+    // 使用默认预估时间，避免启动时的API调用导致风控
+    let estimatedTime = '';
+    if (mode === 'conservative') {
+        estimatedTime = '数小时';
+    } else if (mode === 'optimized') {
+        estimatedTime = '30分钟-2小时（优化版）';
+    } else if (mode === 'high-performance') {
+        estimatedTime = '10分钟-1小时（高性能版）';
+    } else {
+        estimatedTime = '1-3小时';
+    }
+
+    const modeNames = {
+        'standard': '标准',
+        'conservative': '保守',
+        'optimized': '优化',
+        'high-performance': '高性能'
+    };
+
+    if (!confirm(`确定要执行一键更新吗？将使用${modeNames[mode]}模式，预计需要${estimatedTime}。`)) {
+        return;
+    }
+
+    try {
+        // 显示全屏进度界面
+        showFullScreenProgress();
+
+        showMessage(`正在启动一键更新任务（${modeNames[mode]}模式）...`, 'info');
+
+        let endpoint;
+        if (mode === 'conservative') {
+            endpoint = '/api/bilibili/one-click-update-conservative';
+        } else if (mode === 'optimized') {
+            endpoint = '/api/bilibili/one-click-update-optimized';
+        } else if (mode === 'high-performance') {
+            endpoint = '/api/bilibili/one-click-update-high-performance';
+        } else {
+            endpoint = '/api/bilibili/one-click-update';
+        }
+
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                mode: mode
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+            // 设置当前任务ID和模式
+            currentTaskId = result.task_id;
+            currentTaskMode = mode;
+            currentTaskControlState = 'running';
+
+            let successMessage = `一键更新任务已启动！正在后台执行（${modeNames[mode]}模式），预计需要${estimatedTime}。`;
+
+            if (mode === 'optimized' && result.optimization_features) {
+                successMessage += '\n\n🚀 启用的优化功能：\n' + result.optimization_features.map(feature => '• ' + feature).join('\n');
+            } else if (mode === 'high-performance' && result.performance_features) {
+                successMessage += '\n\n⚡ 高性能功能：\n' + result.performance_features.map(feature => '• ' + feature).join('\n');
+            }
+
+            showMessage(successMessage, 'success');
+
+            // 发送启动通知
+            if (window.BilibiliTool && window.BilibiliTool.sendInfoNotification) {
+                window.BilibiliTool.sendInfoNotification(
+                    '一键更新已启动',
+                    `${modeNames[mode]}模式执行中，预计需要${estimatedTime}`
+                );
+            }
+
+            // 初始化进度界面
+            initializeProgressInterface();
+            showTaskControls(); // 显示任务控制按钮
+
+            // 设置初始状态
+            const statusElement = document.getElementById('taskStatus');
+            if (statusElement) {
+                statusElement.textContent = '正在初始化...';
+                statusElement.className = 'text-info';
+            }
+
+            startProgressPolling(result.task_id);
+
+        } else {
+            throw new Error(result.detail || '启动一键更新失败');
+        }
+    } catch (error) {
+        hideFullScreenProgress();
+        console.error('一键更新失败:', error);
+        showMessage('一键更新失败: ' + error.message, 'danger');
+
+        // 发送错误通知
+        if (window.BilibiliTool && window.BilibiliTool.sendErrorNotification) {
+            window.BilibiliTool.sendErrorNotification('一键更新失败', error.message);
+        }
+    }
+}
+
+// 为兼容性添加oneClickUpdate函数
+function oneClickUpdate() {
+    return startOneClickUpdate('standard');
+}
+
+// 确保函数在DOM加载完成后绑定到window对象
+document.addEventListener('DOMContentLoaded', function() {
+    // 立即将函数绑定到window对象
+    window.oneClickUpdate = oneClickUpdate;
+    window.startOneClickUpdate = startOneClickUpdate;
+    
+    // 绑定一键更新按钮事件
+    const oneClickBtn = document.getElementById('one-click-update-btn');
+    if (oneClickBtn) {
+        oneClickBtn.addEventListener('click', function() {
+            if (typeof window.oneClickUpdate === 'function') {
+                window.oneClickUpdate();
+            } else {
+                console.error('oneClickUpdate function not found');
+            }
+        });
+    }
+});
+
 function startServiceStatusMonitor() {
     // 如果已经有监控在运行，先停止它
     if (serviceStatusChecker) {
@@ -122,113 +260,6 @@ function showQuickSyncModal() {
 }
 
 /**
- * 启动一键更新（带模式选择）
- */
-async function startOneClickUpdate(mode = 'standard') {
-    // 关闭模态框
-    const modal = bootstrap.Modal.getInstance(document.getElementById('syncOptionsModal'));
-    if (modal) {
-        modal.hide();
-    }
-
-    // 使用默认预估时间，避免启动时的API调用导致风控
-    let estimatedTime = '';
-    if (mode === 'conservative') {
-        estimatedTime = '数小时';
-    } else if (mode === 'optimized') {
-        estimatedTime = '30分钟-2小时（优化版）';
-    } else {
-        estimatedTime = '1-3小时';
-    }
-
-    const modeNames = {
-        'standard': '标准',
-        'conservative': '保守',
-        'optimized': '优化'
-    };
-
-    if (!confirm(`确定要执行一键更新吗？将使用${modeNames[mode]}模式，预计需要${estimatedTime}。`)) {
-        return;
-    }
-
-    try {
-        // 显示全屏进度界面
-        showFullScreenProgress();
-
-        showMessage(`正在启动一键更新任务（${modeNames[mode]}模式）...`, 'info');
-
-        let endpoint;
-        if (mode === 'conservative') {
-            endpoint = '/api/bilibili/one-click-update-conservative';
-        } else if (mode === 'optimized') {
-            endpoint = '/api/bilibili/one-click-update-optimized';
-        } else {
-            endpoint = '/api/bilibili/one-click-update';
-        }
-
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                mode: mode
-            })
-        });
-
-        const result = await response.json();
-
-        if (response.ok) {
-            // 设置当前任务ID和模式
-            currentTaskId = result.task_id;
-            currentTaskMode = mode;
-            currentTaskControlState = 'running';
-
-            let successMessage = `一键更新任务已启动！正在后台执行（${modeNames[mode]}模式），预计需要${estimatedTime}。`;
-
-            if (mode === 'optimized' && result.optimization_features) {
-                successMessage += '\n\n🚀 启用的优化功能：\n' + result.optimization_features.map(feature => '• ' + feature).join('\n');
-            }
-
-            showMessage(successMessage, 'success');
-
-            // 发送启动通知
-            if (window.BilibiliTool && window.BilibiliTool.sendInfoNotification) {
-                window.BilibiliTool.sendInfoNotification(
-                    '一键更新已启动',
-                    `${modeNames[mode]}模式执行中，预计需要${estimatedTime}`
-                );
-            }
-
-            // 初始化进度界面
-            initializeProgressInterface();
-            showTaskControls(); // 显示任务控制按钮
-
-            // 设置初始状态
-            const statusElement = document.getElementById('taskStatus');
-            if (statusElement) {
-                statusElement.textContent = '正在初始化...';
-                statusElement.className = 'text-info';
-            }
-
-            startProgressPolling(result.task_id);
-
-        } else {
-            throw new Error(result.detail || '启动一键更新失败');
-        }
-    } catch (error) {
-        hideFullScreenProgress();
-        console.error('一键更新失败:', error);
-        showMessage('一键更新失败: ' + error.message, 'danger');
-
-        // 发送错误通知
-        if (window.BilibiliTool && window.BilibiliTool.sendErrorNotification) {
-            window.BilibiliTool.sendErrorNotification('一键更新失败', error.message);
-        }
-    }
-}
-
-/**
  * 启动标准同步
  */
 async function startStandardSync() {
@@ -239,6 +270,20 @@ async function startStandardSync() {
     }
 
     await startSync();
+}
+
+/**
+ * 启动高性能同步
+ */
+async function startHighPerformanceSync() {
+    // 关闭模态框
+    const modal = bootstrap.Modal.getInstance(document.getElementById('quickSyncModal'));
+    if (modal) {
+        modal.hide();
+    }
+
+    // 启动高性能一键更新
+    await startOneClickUpdate('high-performance');
 }
 
 /**
@@ -1379,6 +1424,8 @@ function startProgressPolling(taskId) {
                 endpoint = `/api/bilibili/one-click-update-optimized/${taskId}`;
             } else if (currentTaskMode === 'conservative') {
                 endpoint = `/api/bilibili/one-click-update-conservative/${taskId}`;
+            } else if (currentTaskMode === 'high-performance') {
+                endpoint = `/api/bilibili/one-click-update-high-performance/${taskId}`;
             }
 
             const response = await fetch(endpoint);
@@ -1845,7 +1892,13 @@ function refreshDashboard() {
 document.addEventListener('DOMContentLoaded', function () {
     const oneClickBtn = document.getElementById('one-click-update-btn');
     if (oneClickBtn) {
-        oneClickBtn.addEventListener('click', oneClickUpdate);
+        oneClickBtn.addEventListener('click', function() {
+            if (typeof window.oneClickUpdate === 'function') {
+                window.oneClickUpdate();
+            } else {
+                console.error('oneClickUpdate function not found');
+            }
+        });
     }
 });
 
@@ -1857,9 +1910,9 @@ window.showAllInactiveUsers = showAllInactiveUsers;
 window.filterInactiveUsers = filterInactiveUsers;
 window.unfollowUser = unfollowUser;
 window.batchUnfollowInactive = batchUnfollowInactive;
+window.refreshDashboard = refreshDashboard;
 window.oneClickUpdate = oneClickUpdate;
 window.startOneClickUpdate = startOneClickUpdate;
-window.refreshDashboard = refreshDashboard;
 
 /**
  * 隐藏全屏进度界面
@@ -2633,6 +2686,11 @@ window.controlTask = controlTask;
 window.updateControlButtons = updateControlButtons;
 window.showTaskControls = showTaskControls;
 window.hideTaskControls = hideTaskControls;
+
+// 将高性能同步功能暴露到全局作用域
+window.startHighPerformanceSync = startHighPerformanceSync;
+window.showQuickSyncModal = showQuickSyncModal;
+window.startStandardSync = startStandardSync;
 
 // 任务控制相关函数
 
