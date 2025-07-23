@@ -74,11 +74,28 @@
 - ❌ **恢复关注**: 支持重新关注已删除的用户（回关功能）
 - ❌ **删除原因记录**: 记录删除原因和时间
 
-### 🤖 用户画像与建议
-- ❌ **用户画像分析**: 基于关注UP主分析用户兴趣偏好
-- ❌ **关注建议**: 根据已关注UP主推荐相似用户
-- ❌ **兴趣标签**: 生成用户个人兴趣标签云
-- ❌ **偏好趋势**: 分析用户兴趣变化趋势
+### 🤖 AI智能分析功能
+
+**全新的AI驱动用户画像分析系统**，提供深度的关注行为分析和个性化建议：
+
+#### 核心功能
+- **🎯 智能用户画像**: 基于关注行为生成详细的用户类型分析
+- **🏷️ 智能兴趣标签**: 自动识别用户兴趣偏好，生成主要、次要和新兴兴趣标签
+- **💡 个性化推荐**: 推荐相关UP主、内容类型和个性化建议
+- **📊 自然语言报告**: 生成易读的分析报告，包含优势分析和改进建议
+
+#### 技术特性
+- **多AI服务支持**: 兼容OpenAI、Claude、Gemini等主流AI服务
+- **本地化处理**: 数据分析在本地进行，保护用户隐私
+- **智能配置**: 支持自定义AI服务配置和参数调整
+- **实时分析**: 基于最新关注数据进行动态分析
+
+#### 使用方式
+1. 在AI配置页面设置AI服务（支持API密钥或本地模型）
+2. 访问AI智能分析页面进行用户画像分析
+3. 查看详细的分析报告和个性化建议
+
+> **注意**: AI分析功能需要配置相应的AI服务，首次使用请先完成AI配置。
 
 ### 📈 观看数据统计
 - ❌ **观看时长统计**: 统计每个UP主的观看时长
@@ -91,6 +108,20 @@
 - ❌ **数据文件管理**: 完整数据库文件的导入导出
 - ❌ **备份恢复**: 自动备份和数据恢复功能
 - ❌ **多格式支持**: 支持更多数据格式
+
+### 🔔 智能通知系统
+- ✅ **桌面通知**: 支持浏览器原生通知功能
+- ✅ **多类型通知**: 成功、错误、警告、信息等不同类型
+- ✅ **个性化设置**: 可自定义通知行为和显示时间
+- ✅ **美观界面**: B站风格Logo和精美图标
+- ✅ **智能管理**: 统一的通知管理和权限控制
+
+### 🛡️ 风控与安全
+- ✅ **智能风控检测**: 实时监控API调用状态
+- ✅ **自适应延迟**: 根据响应情况动态调整请求频率
+- ✅ **保守同步模式**: 专门应对严格的API限制
+- ✅ **错误恢复机制**: 支持断点续传和任务恢复
+- ✅ **安全配置**: Cookie管理和账号安全保护
 
 ### 🔗 社交分享
 - ❌ **关注列表分享**: 生成分享链接分享关注列表
@@ -110,6 +141,7 @@
 
 - Python 3.8 或更高版本
 - Chrome/Edge 浏览器 (推荐)
+- 稳定的网络连接
 
 ### 快速开始
 
@@ -143,6 +175,14 @@
    
    > 💡 **端口说明**: 如果8080端口被占用，系统会自动尝试8081、8082等端口。请查看启动日志中的实际端口号。
 
+### 首次使用建议
+
+1. **获取Cookie**: 登录B站后，从浏览器开发者工具中获取Cookie
+2. **测试连接**: 在首页测试API连接状态
+3. **小批量同步**: 首次建议同步少量用户测试功能
+4. **配置AI服务**: 如需使用AI分析功能，请先配置AI服务
+5. **启用通知**: 允许浏览器通知以获得更好的使用体验
+
 ## 配置说明
 
 ### Cookie获取方法
@@ -153,23 +193,85 @@
 4. 找到第一个请求，复制Cookie值
 5. 粘贴到配置文件中
 
-### 配置文件示例
+### 📖 详细使用指南
+
+#### 🔧 配置说明
+
+**基础配置**
+
+在 `config/config.json` 中配置以下信息：
 
 ```json
 {
   "bilibili": {
-    "cookie": "你的Cookie信息",
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    "cookie": "你的B站Cookie",
+    "api_delay": 1.5,
+    "retry_times": 3,
+    "timeout": 30,
+    "fetch_user_details": true
   },
   "database": {
-    "path": "data/bilibili.db"
+    "path": "data/bilibili_tool.db"
   },
   "server": {
-    "host": "127.0.0.1",
-    "port": 8080
+    "host": "localhost",
+    "port": 8083,
+    "debug": false
+  },
+  "ai": {
+    "provider": "openai",
+    "api_key": "your-api-key",
+    "base_url": "https://api.openai.com/v1",
+    "model": "gpt-3.5-turbo"
   }
 }
 ```
+
+**配置项说明**
+
+**Bilibili配置**:
+- `cookie`: B站登录Cookie（必需）
+- `api_delay`: API调用延迟，建议1.5-2.0秒
+- `retry_times`: 失败重试次数
+- `timeout`: 请求超时时间
+- `fetch_user_details`: 是否获取用户详细信息（包括等级）
+
+**AI配置**:
+- `provider`: AI服务提供商（openai/claude/gemini）
+- `api_key`: AI服务API密钥
+- `base_url`: API基础URL
+- `model`: 使用的模型名称
+
+#### 🍪 Cookie获取方法
+
+1. **登录B站网页版**
+2. **打开开发者工具**（按F12）
+3. **切换到Network标签**
+4. **刷新页面**
+5. **找到任意请求**，在Headers中复制Cookie值
+6. **完整复制**整个Cookie字符串到配置文件
+
+> ⚠️ **安全提醒**: Cookie包含敏感信息，请妥善保管，定期更换
+
+#### 🚀 功能使用指南
+
+**关注列表同步**
+1. **首次同步**: 建议先同步少量用户测试
+2. **批量同步**: 确认无误后进行完整同步
+3. **增量更新**: 后续可使用增量同步节省时间
+4. **风控处理**: 遇到API限制时使用保守模式
+
+**AI智能分析**
+1. **配置AI服务**: 在AI配置页面设置API密钥
+2. **测试连接**: 确认AI服务连接正常
+3. **开始分析**: 访问AI分析页面进行用户画像分析
+4. **查看报告**: 获取详细的分析报告和建议
+
+**数据管理**
+1. **查看统计**: 在用户统计页面查看详细数据
+2. **筛选排序**: 使用多种条件筛选和排序
+3. **导出数据**: 支持多种格式的数据导出
+4. **数据更新**: 定期同步保持数据新鲜度
 
 ## 功能说明
 
@@ -579,6 +681,124 @@ B站API获取 → 数据验证 → 更新/插入user_stats表 → 实时显示
 - [ ] 社交分享功能
 - [ ] 移动端适配
 
+## 🛡️ 风控处理指南
+
+### 常见风控错误码
+
+| 错误码 | 含义 | 常见原因 | 处理建议 |
+|--------|------|----------|----------|
+| -352 | 频率限制 | API调用过于频繁 | 增加延迟，降低并发 |
+| -503 | 服务暂时不可用 | 系统负载过高或触发保护 | 稍后重试，使用保守模式 |
+| -799 | 请求过于频繁 | 短时间内大量请求 | 大幅增加延迟时间 |
+| -101/-102 | 登录问题 | Cookie失效或账号异常 | 重新获取Cookie |
+
+### 风控应对策略
+
+#### 1. 保守同步模式
+```bash
+# 使用保守同步工具
+python conservative_sync_resume.py 0 50
+
+# 参数说明：
+# 0: 从第一个用户开始
+# 50: 只处理50个用户（小批量测试）
+```
+
+#### 2. 推荐配置
+```json
+{
+  "bilibili": {
+    "api_delay": 2.0,
+    "retry_times": 3,
+    "timeout": 30,
+    "max_concurrent_requests": 1
+  }
+}
+```
+
+#### 3. 分批处理策略
+
+| 用户数量 | 推荐模式 | 预计时间 | 说明 |
+|----------|----------|----------|------|
+| 1-50 | 保守模式 | 5-15分钟 | 测试验证 |
+| 50-200 | 保守模式 | 30-60分钟 | 小批量处理 |
+| 200-500 | 分批保守模式 | 2-4小时 | 分多次处理 |
+| 500+ | 分批保守模式 | 分多天处理 | 每天处理一部分 |
+
+### 风控恢复步骤
+
+1. **识别风控**: 观察日志中的-352等错误码
+2. **立即停止**: 停止所有同步操作
+3. **等待恢复**: 等待30-60分钟让风控自动解除
+4. **调整配置**: 增加api_delay，降低并发数
+5. **小批量测试**: 先处理少量用户验证恢复
+6. **逐步扩大**: 确认正常后逐步增加批次大小
+
+## 🔧 故障排除
+
+### 常见问题解决
+
+#### Q: 为什么显示"暂无统计数据"？
+A: 需要先执行"同步真实数据"或"初始化用户统计数据"功能。
+
+#### Q: 数据更新时间不对？
+A: 检查系统时间设置，或重新同步数据。
+
+#### Q: 页面加载很慢？
+A: 数据量大时可能较慢，建议使用筛选功能减少显示数据量。
+
+#### Q: 部分用户没有统计数据？
+A: 可能是API限制或用户隐私设置导致，属于正常现象。
+
+#### Q: AI分析功能无法使用？
+A: 检查AI配置是否正确，确认API密钥有效，网络连接正常。
+
+### 日志分析
+
+#### 正常日志示例
+```
+✅ 用户 张三 处理成功
+⏱️  等待 3.2 秒后处理下一个用户...
+📈 进度: 10/50 (20.0%) | 成功率: 90.0%
+```
+
+#### 风控警告示例
+```
+🚫 检测到风控，等待 60 秒...
+⚠️  当前处于风控状态
+❌ 失败次数过多，停止处理
+```
+
+### 紧急情况处理
+
+如果账号被临时限制：
+1. **停止所有操作**
+2. **等待24小时**
+3. **登录网页确认恢复**
+4. **使用更保守的参数重新开始**
+
+## ⚠️ 注意事项
+
+### 🔒 安全与隐私
+
+- **数据本地化**: 所有数据均存储在本地，不会上传到任何第三方服务器
+- **Cookie安全**: Cookie包含敏感信息，请妥善保管，定期更换
+- **AI数据保护**: AI分析在本地进行，用户数据不会发送给AI服务商
+- **账号安全**: 建议使用小号进行测试，避免主账号风险
+
+### 📋 使用规范
+
+- **合理使用**: 请合理控制API调用频率，避免对B站服务器造成压力
+- **法律合规**: 请遵守相关法律法规和B站用户协议
+- **个人使用**: 仅供个人学习和研究使用，禁止商业用途
+- **生态保护**: 禁止恶意刷量或破坏平台生态环境
+
+### 💾 数据管理
+
+- **定期备份**: 重要数据请及时备份，避免意外丢失
+- **数据清理**: 定期清理过期数据，保持系统性能
+- **版本更新**: 关注项目更新，及时升级到最新版本
+
 ## ⚠️ 免责声明
 
 **请仔细阅读以下免责声明，使用本工具即表示您已理解并同意以下条款：**
@@ -626,29 +846,277 @@ B站API获取 → 数据验证 → 更新/插入user_stats表 → 实时显示
 
 本项目采用 Apache 2.0 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
-## 贡献
+## 📁 项目文档说明
 
-欢迎提交 Issue 和 Pull Request！
+本项目包含多个专门的文档文件，提供详细的使用指南和技术说明：
 
-## 更新日志
+### 核心文档
+- **[README.md](README.md)** - 项目主文档（本文件）
+- **[DISCLAIMER.md](DISCLAIMER.md)** - 详细的免责声明和法律条款
+
+### 功能指南
+- **[USER_STATS_README.md](USER_STATS_README.md)** - UP主统计数据功能详细说明
+- **[NOTIFICATION_GUIDE.md](NOTIFICATION_GUIDE.md)** - 浏览器通知功能使用指南
+- **[LEVEL_FIX_README.md](LEVEL_FIX_README.md)** - UP主等级显示修复说明
+
+### 技术文档
+- **[WIND_CONTROL_GUIDE.md](WIND_CONTROL_GUIDE.md)** - B站风控处理详细指南
+- **[PERFORMANCE_OPTIMIZATION_README.md](PERFORMANCE_OPTIMIZATION_README.md)** - 性能优化指南
+- **[SYNC_TIMEOUT_README.md](SYNC_TIMEOUT_README.md)** - 智能轮询超时机制说明
+
+### 操作指南
+- **[CONSERVATIVE_SYNC_GUIDE.md](CONSERVATIVE_SYNC_GUIDE.md)** - 保守同步模式使用指南
+- **[ONE_CLICK_UPDATE_README.md](ONE_CLICK_UPDATE_README.md)** - 一键更新功能说明
+- **[USER_STATS_ISSUE_RESOLUTION.md](USER_STATS_ISSUE_RESOLUTION.md)** - 用户统计问题解决方案
+
+### 文档使用建议
+
+1. **新用户**: 先阅读本README和DISCLAIMER
+2. **功能使用**: 根据需要查看对应的功能指南
+3. **遇到问题**: 查看相关的技术文档和故障排除指南
+4. **高级用户**: 参考性能优化和技术文档进行定制
+
+> 💡 **提示**: 所有文档都包含详细的使用说明、配置示例和故障排除方法，建议根据实际需要选择性阅读。
+
+---
+
+**⭐ 如果这个项目对你有帮助，请给个Star支持一下！**
+
+**📧 有问题或建议？欢迎提交Issue或Pull Request！**
+
+**🔗 项目地址**: [GitHub Repository](https://github.com/your-username/bilibili-batch-operation-tool)
+
+**📖 在线文档**: [项目Wiki](https://github.com/your-username/bilibili-batch-operation-tool/wiki)
+
+**💬 交流群组**: [加入讨论](https://github.com/your-username/bilibili-batch-operation-tool/discussions)
+
+## 📚 技术文档
+
+### 🏗️ 项目架构
+
+```
+Bilibili-batch-operation-tool/
+├── src/                    # 核心源代码
+│   ├── api/               # API接口层
+│   │   ├── bilibili.py    # B站API封装
+│   │   ├── ai_config.py   # AI配置API
+│   │   ├── analysis.py    # 数据分析API
+│   │   └── user_profile.py # 用户资料API
+│   ├── ai/                # AI分析模块
+│   │   ├── analysis_engine.py # AI分析引擎
+│   │   └── providers/     # AI服务提供商
+│   ├── database/          # 数据库模块
+│   │   ├── models.py      # 数据模型
+│   │   └── operations.py  # 数据库操作
+│   └── utils/             # 工具函数
+├── web/                   # Web界面
+│   ├── static/           # 静态资源
+│   └── templates/        # HTML模板
+├── config/               # 配置文件
+├── data/                 # 数据存储
+├── logs/                 # 日志文件
+└── scripts/              # 辅助脚本
+```
+
+### 🔌 API文档
+
+#### 关注列表API
+- `GET /api/bilibili/following-list` - 获取关注列表
+- `POST /api/bilibili/sync-following` - 同步关注列表
+- `GET /api/bilibili/groups` - 获取分组信息
+- `POST /api/bilibili/update-groups` - 更新分组信息
+
+#### 数据分析API
+- `GET /api/data/category-stats` - 获取分类统计
+- `GET /api/data/preference-trends` - 获取偏好趋势
+- `GET /api/data/user-stats` - 获取用户统计数据
+- `GET /api/data/user-stats/summary` - 获取统计概要
+
+#### AI分析API
+- `GET /api/ai/status` - 获取AI服务状态
+- `GET /api/ai/providers` - 获取可用AI提供商
+- `POST /api/ai/config` - 更新AI配置
+- `POST /api/ai/test` - 测试AI连接
+- `POST /api/ai/profile-analysis` - 用户画像分析
+- `POST /api/ai/interest-tags` - 智能兴趣标签
+- `POST /api/ai/recommendations` - 智能推荐
+- `POST /api/ai/analysis-report` - 分析报告
+
+### 🗄️ 数据库设计
+
+#### 主要数据表
+
+**following_list** - 关注列表
+```sql
+CREATE TABLE following_list (
+    uid INTEGER PRIMARY KEY,
+    username TEXT NOT NULL,
+    face TEXT,
+    sign TEXT,
+    level INTEGER DEFAULT 0,
+    category TEXT DEFAULT '未分类',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**user_stats** - 用户统计
+```sql
+CREATE TABLE user_stats (
+    uid INTEGER PRIMARY KEY,
+    fans_count INTEGER DEFAULT 0,
+    following_count INTEGER DEFAULT 0,
+    video_count INTEGER DEFAULT 0,
+    total_views INTEGER DEFAULT 0,
+    last_video_time INTEGER DEFAULT 0,
+    activity_score REAL DEFAULT 0.0,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**groups** - 分组信息
+```sql
+CREATE TABLE groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+### 🔧 开发指南
+
+#### 环境搭建
+```bash
+# 克隆项目
+git clone https://github.com/your-username/bilibili-batch-operation-tool.git
+cd bilibili-batch-operation-tool
+
+# 创建虚拟环境
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+venv\Scripts\activate     # Windows
+
+# 安装依赖
+pip install -r requirements.txt
+
+# 初始化配置
+cp config/config.example.json config/config.json
+
+# 启动开发服务器
+python main.py
+```
+
+#### 代码规范
+- 遵循 PEP 8 代码规范
+- 使用类型注解提高代码可读性
+- 添加适当的注释和文档字符串
+- 确保代码通过所有测试
+
+#### 测试
+```bash
+# 运行单元测试
+python -m pytest tests/
+
+# 运行代码质量检查
+flake8 src/
+pylint src/
+
+# 运行类型检查
+mypy src/
+```
+
+## 🤝 贡献指南
+
+我们欢迎任何形式的贡献！
+
+### 如何贡献
+
+1. **Fork 本项目**
+2. **创建特性分支** (`git checkout -b feature/AmazingFeature`)
+3. **提交修改** (`git commit -m 'Add some AmazingFeature'`)
+4. **推送到分支** (`git push origin feature/AmazingFeature`)
+5. **创建 Pull Request**
+
+### 贡献类型
+
+- 🐛 **Bug修复**: 修复现有功能的问题
+- ✨ **新功能**: 添加新的功能特性
+- 📚 **文档**: 改进文档和说明
+- 🎨 **界面**: 改进用户界面和体验
+- ⚡ **性能**: 优化性能和效率
+- 🔧 **工具**: 改进开发工具和流程
+
+### 报告问题
+
+如果你发现了bug或有新的功能建议：
+
+1. **检查现有Issues**: 避免重复报告
+2. **创建详细Issue**: 包含问题描述、复现步骤、环境信息
+3. **提供日志**: 附上相关的错误日志
+4. **建议解决方案**: 如果可能，提供解决思路
+
+### 开发流程
+
+1. **讨论**: 在Issue中讨论新功能或重大变更
+2. **开发**: 在本地环境进行开发和测试
+3. **测试**: 确保所有测试通过
+4. **文档**: 更新相关文档
+5. **提交**: 创建Pull Request并等待审核
+
+## 📋 更新日志
+
+### V0.0.7 (计划中)
+- 🚀 新增AI智能分析功能，支持用户画像分析
+- 🔧 新增AI配置管理，支持多种AI服务提供商
+- 📊 新增智能兴趣标签和个性化推荐
+- 🎯 新增自然语言分析报告生成
+- 🛡️ 增强数据隐私保护和本地化处理
+
+### V0.0.6 (当前版本)
+- ✅ 新增UP主统计数据系统，提供完整的数据查看和管理功能
+- ✅ 新增统计数据永久保存机制，支持离线查看历史数据
+- ✅ 新增多页面数据更新时间提醒系统
+- ✅ 新增UP主统计数据专用页面，支持搜索、筛选、排序、分页
+- ✅ 新增最后视频发布时间显示，完善UP主信息展示
+- 🐛 修复前端时间显示错误，正确处理时间戳转换
+- 🐛 修复API数据格式化问题，确保时间格式正确
+- ✅ 优化用户界面，添加美观的渐变背景和响应式设计
+
+### V0.0.5
+- 🐛 修复B站分组移动API端点错误的问题
+- 🐛 使用正确的 `x/relation/tags/addUsers` API进行分组移动
+- 🐛 移除不必要的 `act` 参数，简化API调用
+- ✅ 优化分组操作稳定性和成功率
+
+### V0.0.4
+- 🐛 修复B站分组移动API缺少必需参数的问题
+- 🐛 修复分组移动成功但B站服务器未同步的问题
+- ✅ 优化分组操作逻辑，确保B站同步成功后才更新本地数据
+- ✅ 改进错误处理和日志记录
+
+### V0.0.3
+- ✅ 新增头像点击跳转功能，支持快速访问UP主B站主页
+- ✅ 优化头像链接样式，添加悬停效果
+- ✅ 改进用户体验和界面交互
 
 ### V0.0.2
-- 新增关注分组管理功能
-- 支持查看和管理B站关注分组
-- 支持批量移动用户到指定分组
-- 支持分组内用户的批量操作
-- 优化用户界面和交互体验
+- ✅ 新增关注分组管理功能
+- ✅ 支持查看和管理B站关注分组
+- ✅ 支持批量移动用户到指定分组
+- ✅ 支持分组内用户的批量操作
+- ✅ 优化用户界面和交互体验
 
 ### V0.0.1
-- 新增智能分类系统
-- 新增数据分析与可视化功能
-- 新增批量操作功能
-- 优化系统性能和稳定性
+- ✅ 新增智能分类系统
+- ✅ 新增数据分析与可视化功能
+- ✅ 新增批量操作功能
+- ✅ 优化系统性能和稳定性
 
 ### V0.0.0 (2025-01-26)
-- 初始版本发布
-- 基础功能实现
-- Web界面完成
+- ✅ 初始版本发布
+- ✅ 基础功能实现
+- ✅ Web界面完成
 
 ---
 
@@ -790,4 +1258,4 @@ POST /api/bilibili/one-click-update-optimized
 - `src/bilibili/optimized_api.py` - 优化API接口
 - `performance_config.json` - 性能配置文件
 
-这些优化策略已在生产环境中验证，可以在保证数据完整性的前提下显著提升同步效率。 
+这些优化策略已在生产环境中验证，可以在保证数据完整性的前提下显著提升同步效率。

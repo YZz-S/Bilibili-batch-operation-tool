@@ -1,0 +1,450 @@
+{% extends "base.html" %}
+
+{% block title %}AI智能画像分析 - 哔哩哔哩关注列表管理工具{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h2>
+                <i class="bi bi-brain"></i>
+                AI智能画像分析
+            </h2>
+            <div>
+                <button class="btn btn-outline-primary" onclick="refreshAnalysis()">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    刷新分析
+                </button>
+                <a href="/ai-config" class="btn btn-outline-secondary">
+                    <i class="bi bi-gear"></i>
+                    AI配置
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI服务状态 -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="alert alert-info" id="aiStatus">
+            <div class="d-flex align-items-center">
+                <div class="spinner-border spinner-border-sm me-2" role="status">
+                    <span class="visually-hidden">检查中...</span>
+                </div>
+                正在检查AI服务状态...
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- AI分析结果 -->
+<div class="row" id="analysisContent" style="display: none;">
+    <!-- 用户画像深度分析 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-primary text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-person-badge"></i>
+                    用户画像深度分析
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="profileAnalysis">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">分析中...</span>
+                        </div>
+                        <p class="mt-2 text-muted">AI正在深度分析您的用户画像...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 智能兴趣标签 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-success text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-tags"></i>
+                    智能兴趣标签
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="interestTags">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-success" role="status">
+                            <span class="visually-hidden">生成中...</span>
+                        </div>
+                        <p class="mt-2 text-muted">AI正在生成个性化兴趣标签...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 智能推荐 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="bi bi-lightbulb"></i>
+                    智能推荐
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="recommendations">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-info" role="status">
+                            <span class="visually-hidden">推荐中...</span>
+                        </div>
+                        <p class="mt-2 text-muted">AI正在生成个性化推荐...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 自然语言分析报告 -->
+    <div class="col-lg-6 mb-4">
+        <div class="card shadow">
+            <div class="card-header bg-warning text-dark">
+                <h5 class="mb-0">
+                    <i class="bi bi-file-text"></i>
+                    分析报告
+                </h5>
+            </div>
+            <div class="card-body">
+                <div id="analysisReport">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-warning" role="status">
+                            <span class="visually-hidden">生成中...</span>
+                        </div>
+                        <p class="mt-2 text-muted">AI正在生成自然语言分析报告...</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 错误提示 -->
+<div class="row" id="errorContent" style="display: none;">
+    <div class="col-12">
+        <div class="alert alert-danger">
+            <h5><i class="bi bi-exclamation-triangle"></i> AI服务不可用</h5>
+            <p class="mb-2">无法使用AI智能分析功能，可能的原因：</p>
+            <ul class="mb-3">
+                <li>AI服务未配置或配置错误</li>
+                <li>API密钥无效或已过期</li>
+                <li>网络连接问题</li>
+                <li>AI服务暂时不可用</li>
+            </ul>
+            <a href="/ai-config" class="btn btn-primary">
+                <i class="bi bi-gear"></i>
+                前往AI配置
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let analysisData = null;
+
+    document.addEventListener('DOMContentLoaded', function () {
+        checkAIStatusAndLoadAnalysis();
+    });
+
+    async function checkAIStatusAndLoadAnalysis() {
+        try {
+            // 检查AI服务状态
+            const statusResponse = await fetch('/api/ai/status');
+            const statusData = await statusResponse.json();
+
+            const statusElement = document.getElementById('aiStatus');
+            
+            if (statusData.configured && statusData.available) {
+                statusElement.className = 'alert alert-success';
+                statusElement.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-check-circle me-2"></i>
+                        AI服务已就绪 (${statusData.provider} - ${statusData.model})
+                    </div>
+                `;
+                
+                // 显示分析内容并开始加载
+                document.getElementById('analysisContent').style.display = 'block';
+                await loadAIAnalysis();
+            } else {
+                statusElement.className = 'alert alert-warning';
+                statusElement.innerHTML = `
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-exclamation-triangle me-2"></i>
+                        AI服务未配置或不可用
+                    </div>
+                `;
+                
+                // 显示错误内容
+                document.getElementById('errorContent').style.display = 'block';
+            }
+        } catch (error) {
+            console.error('检查AI状态失败:', error);
+            const statusElement = document.getElementById('aiStatus');
+            statusElement.className = 'alert alert-danger';
+            statusElement.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <i class="bi bi-x-circle me-2"></i>
+                    检查AI状态失败: ${error.message}
+                </div>
+            `;
+            document.getElementById('errorContent').style.display = 'block';
+        }
+    }
+
+    async function loadAIAnalysis() {
+        try {
+            // 并行加载所有AI分析
+            const [profileResponse, tagsResponse, recommendationsResponse, reportResponse] = await Promise.allSettled([
+                fetch('/api/ai/profile-analysis'),
+                fetch('/api/ai/interest-tags'),
+                fetch('/api/ai/recommendations'),
+                fetch('/api/ai/analysis-report')
+            ]);
+
+            // 处理用户画像分析
+            if (profileResponse.status === 'fulfilled' && profileResponse.value.ok) {
+                const profileData = await profileResponse.value.json();
+                displayProfileAnalysis(profileData);
+            } else {
+                displayError('profileAnalysis', '用户画像分析失败');
+            }
+
+            // 处理兴趣标签
+            if (tagsResponse.status === 'fulfilled' && tagsResponse.value.ok) {
+                const tagsData = await tagsResponse.value.json();
+                displayInterestTags(tagsData);
+            } else {
+                displayError('interestTags', '兴趣标签生成失败');
+            }
+
+            // 处理推荐
+            if (recommendationsResponse.status === 'fulfilled' && recommendationsResponse.value.ok) {
+                const recommendationsData = await recommendationsResponse.value.json();
+                displayRecommendations(recommendationsData);
+            } else {
+                displayError('recommendations', '智能推荐生成失败');
+            }
+
+            // 处理分析报告
+            if (reportResponse.status === 'fulfilled' && reportResponse.value.ok) {
+                const reportData = await reportResponse.value.json();
+                displayAnalysisReport(reportData);
+            } else {
+                displayError('analysisReport', '分析报告生成失败');
+            }
+
+        } catch (error) {
+            console.error('加载AI分析失败:', error);
+            ['profileAnalysis', 'interestTags', 'recommendations', 'analysisReport'].forEach(id =>
+                displayError(id, 'AI分析加载失败')
+            );
+        }
+    }
+
+    function displayProfileAnalysis(data) {
+        const element = document.getElementById('profileAnalysis');
+        if (data.success && data.analysis) {
+            element.innerHTML = `
+                <div class="mb-3">
+                    <h6 class="text-primary">用户类型</h6>
+                    <span class="badge bg-primary fs-6">${data.analysis.user_type || '未知'}</span>
+                </div>
+                <div class="mb-3">
+                    <h6 class="text-success">活跃度评估</h6>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-success" style="width: ${data.analysis.activity_score || 0}%"></div>
+                    </div>
+                    <small class="text-muted">${data.analysis.activity_description || '暂无描述'}</small>
+                </div>
+                <div class="mb-3">
+                    <h6 class="text-info">兴趣广度</h6>
+                    <div class="progress mb-2">
+                        <div class="progress-bar bg-info" style="width: ${data.analysis.diversity_score || 0}%"></div>
+                    </div>
+                    <small class="text-muted">${data.analysis.diversity_description || '暂无描述'}</small>
+                </div>
+                <div>
+                    <h6 class="text-warning">AI洞察</h6>
+                    <p class="text-muted mb-0">${data.analysis.insights || '暂无AI洞察'}</p>
+                </div>
+            `;
+        } else {
+            displayError('profileAnalysis', data.message || '用户画像分析失败');
+        }
+    }
+
+    function displayInterestTags(data) {
+        const element = document.getElementById('interestTags');
+        if (data.success && data.tags) {
+            const primaryTags = data.tags.primary || [];
+            const secondaryTags = data.tags.secondary || [];
+            const emergingTags = data.tags.emerging || [];
+            
+            element.innerHTML = `
+                <div class="mb-3">
+                    <h6 class="text-primary">主要兴趣标签</h6>
+                    <div class="mb-2">
+                        ${primaryTags.map(tag => 
+                            `<span class="badge bg-primary me-1 mb-1">${tag.name} (${tag.confidence}%)</span>`
+                        ).join('')}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <h6 class="text-success">次要兴趣标签</h6>
+                    <div class="mb-2">
+                        ${secondaryTags.map(tag => 
+                            `<span class="badge bg-success me-1 mb-1">${tag.name} (${tag.confidence}%)</span>`
+                        ).join('')}
+                    </div>
+                </div>
+                <div>
+                    <h6 class="text-warning">新兴兴趣标签</h6>
+                    <div>
+                        ${emergingTags.map(tag => 
+                            `<span class="badge bg-warning me-1 mb-1">${tag.name} (${tag.confidence}%)</span>`
+                        ).join('')}
+                    </div>
+                </div>
+                ${data.explanation ? `
+                <div class="mt-3 pt-3 border-top">
+                    <h6 class="text-muted">标签说明</h6>
+                    <p class="small text-muted mb-0">${data.explanation}</p>
+                </div>
+                ` : ''}
+            `;
+        } else {
+            displayError('interestTags', data.message || '兴趣标签生成失败');
+        }
+    }
+
+    function displayRecommendations(data) {
+        const element = document.getElementById('recommendations');
+        if (data.success && data.recommendations) {
+            const recommendations = data.recommendations;
+            
+            element.innerHTML = `
+                <div class="mb-3">
+                    <h6 class="text-info">推荐UP主</h6>
+                    ${recommendations.creators ? recommendations.creators.map(creator => `
+                        <div class="d-flex justify-content-between align-items-center mb-2 p-2 bg-light rounded">
+                            <div>
+                                <strong>${creator.name}</strong>
+                                <br>
+                                <small class="text-muted">${creator.reason}</small>
+                            </div>
+                            <span class="badge bg-info">${creator.category}</span>
+                        </div>
+                    `).join('') : '<p class="text-muted">暂无推荐</p>'}
+                </div>
+                <div class="mb-3">
+                    <h6 class="text-success">推荐内容类型</h6>
+                    ${recommendations.content_types ? recommendations.content_types.map(type => `
+                        <div class="mb-2">
+                            <span class="badge bg-success me-2">${type.name}</span>
+                            <small class="text-muted">${type.description}</small>
+                        </div>
+                    `).join('') : '<p class="text-muted">暂无推荐</p>'}
+                </div>
+                <div>
+                    <h6 class="text-warning">个性化建议</h6>
+                    <p class="text-muted mb-0">${recommendations.suggestions || '暂无个性化建议'}</p>
+                </div>
+            `;
+        } else {
+            displayError('recommendations', data.message || '智能推荐生成失败');
+        }
+    }
+
+    function displayAnalysisReport(data) {
+        const element = document.getElementById('analysisReport');
+        if (data.success && data.report) {
+            element.innerHTML = `
+                <div class="mb-3">
+                    <h6 class="text-warning">分析摘要</h6>
+                    <p class="mb-0">${data.report.summary || '暂无摘要'}</p>
+                </div>
+                <div class="mb-3">
+                    <h6 class="text-primary">详细分析</h6>
+                    <div class="text-muted" style="line-height: 1.6;">
+                        ${data.report.detailed_analysis ? data.report.detailed_analysis.replace(/\n/g, '<br>') : '暂无详细分析'}
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <h6 class="text-success">优势特点</h6>
+                    ${data.report.strengths ? `
+                        <ul class="list-unstyled">
+                            ${data.report.strengths.map(strength => `
+                                <li class="mb-1"><i class="bi bi-check-circle text-success me-2"></i>${strength}</li>
+                            `).join('')}
+                        </ul>
+                    ` : '<p class="text-muted">暂无优势分析</p>'}
+                </div>
+                <div>
+                    <h6 class="text-info">改进建议</h6>
+                    ${data.report.improvements ? `
+                        <ul class="list-unstyled">
+                            ${data.report.improvements.map(improvement => `
+                                <li class="mb-1"><i class="bi bi-lightbulb text-info me-2"></i>${improvement}</li>
+                            `).join('')}
+                        </ul>
+                    ` : '<p class="text-muted">暂无改进建议</p>'}
+                </div>
+                ${data.report.generated_at ? `
+                <div class="mt-3 pt-3 border-top">
+                    <small class="text-muted">报告生成时间: ${new Date(data.report.generated_at).toLocaleString()}</small>
+                </div>
+                ` : ''}
+            `;
+        } else {
+            displayError('analysisReport', data.message || '分析报告生成失败');
+        }
+    }
+
+    function displayError(elementId, message) {
+        const element = document.getElementById(elementId);
+        element.innerHTML = `
+            <div class="alert alert-warning mb-0">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                ${message}
+            </div>
+        `;
+    }
+
+    async function refreshAnalysis() {
+        // 重置所有内容为加载状态
+        const loadingElements = [
+            { id: 'profileAnalysis', color: 'primary', text: 'AI正在深度分析您的用户画像...' },
+            { id: 'interestTags', color: 'success', text: 'AI正在生成个性化兴趣标签...' },
+            { id: 'recommendations', color: 'info', text: 'AI正在生成个性化推荐...' },
+            { id: 'analysisReport', color: 'warning', text: 'AI正在生成自然语言分析报告...' }
+        ];
+        
+        loadingElements.forEach(item => {
+            document.getElementById(item.id).innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-${item.color}" role="status">
+                        <span class="visually-hidden">分析中...</span>
+                    </div>
+                    <p class="mt-2 text-muted">${item.text}</p>
+                </div>
+            `;
+        });
+        
+        // 重新加载分析
+        await loadAIAnalysis();
+    }
+</script>
+{% endblock %}
