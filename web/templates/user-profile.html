@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户画像与建议 - 哔哩哔哩关注列表管理工具</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="/static/css/style.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .profile-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+        
+        .interest-tag {
+            background: linear-gradient(45deg, #ff6b6b, #feca57);
+            color: white;
+            padding: 0.5rem 1rem;
+            border-radius: 25px;
+            margin: 0.25rem;
+            display: inline-block;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        
+        .suggestion-card {
+            border: none;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s;
+        }
+        
+        .suggestion-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 15px rgba(0, 0, 0, 0.15);
+        }
+        
+        .activity-badge {
+            font-size: 1.1rem;
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+        }
+        
+        .trend-chart {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+        
+        .loading-spinner {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+        
+        .category-progress {
+            margin-bottom: 1rem;
+        }
+        
+        .category-progress .progress {
+            height: 8px;
+            border-radius: 4px;
+        }
+        
+        .diversity-score {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <!-- 导航栏 -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-person-circle"></i>
+                用户画像与建议
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/">首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/following">关注管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/analysis">数据分析</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/user-profile">用户画像</a>
+                    </li>
+                </ul>
+                <button class="btn btn-outline-light" onclick="refreshAllData()">
+                    <i class="bi bi-arrow-clockwise"></i> 刷新数据
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <!-- 用户画像概览 -->
+        <div class="row">
+            <div class="col-12">
+                <div class="profile-card" id="profileCard">
+                    <div class="loading-spinner" id="profileLoading">
+                        <div class="spinner-border text-light" role="status">
+                            <span class="visually-hidden">加载中...</span>
+                        </div>
+                        <p class="mt-2">正在分析用户画像...</p>
+                    </div>
+                    <div id="profileContent" style="display: none;">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h2><i class="bi bi-person-badge"></i> 用户画像分析</h2>
+                                <p class="lead mb-3">基于您的关注数据生成的个性化画像</p>
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <h5>关注总数</h5>
+                                        <p class="h3" id="totalFollowing">-</p>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <h5>活跃度</h5>
+                                        <span class="activity-badge badge" id="activityLevel">-</span>
+                                    </div>
+                                </div>
+                                <div class="mt-3">
+                                    <h5>画像标签</h5>
+                                    <div id="profileTags"></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 text-center">
+                                <div class="diversity-score" id="diversityScore">-</div>
+                                <p>多样性得分</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 功能选项卡 -->
+        <ul class="nav nav-tabs" id="profileTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="interests-tab" data-bs-toggle="tab" data-bs-target="#interests" type="button" role="tab">
+                    <i class="bi bi-heart"></i> 兴趣分析
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="suggestions-tab" data-bs-toggle="tab" data-bs-target="#suggestions" type="button" role="tab">
+                    <i class="bi bi-lightbulb"></i> 关注建议
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tags-tab" data-bs-toggle="tab" data-bs-target="#tags" type="button" role="tab">
+                    <i class="bi bi-tags"></i> 兴趣标签
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="trends-tab" data-bs-toggle="tab" data-bs-target="#trends" type="button" role="tab">
+                    <i class="bi bi-graph-up"></i> 偏好趋势
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="profileTabContent">
+            <!-- 兴趣分析 -->
+            <div class="tab-pane fade show active" id="interests" role="tabpanel">
+                <div class="row mt-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="bi bi-pie-chart"></i> 兴趣分布</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="interestChart" width="400" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="bi bi-trophy"></i> 兴趣排行</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="topInterests"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 关注建议 -->
+            <div class="tab-pane fade" id="suggestions" role="tabpanel">
+                <div class="row mt-4">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="bi bi-compass"></i> 类别建议</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="categorySuggestions"></div>
+                            </div>
+                        </div>
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h5><i class="bi bi-people"></i> 推荐用户</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="userRecommendations"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="bi bi-info-circle"></i> 建议说明</h5>
+                            </div>
+                            <div class="card-body">
+                                <p id="suggestionReason">正在分析...</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 兴趣标签 -->
+            <div class="tab-pane fade" id="tags" role="tabpanel">
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="bi bi-bookmark"></i> 兴趣标签分析</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <h6 class="text-primary">主要兴趣</h6>
+                                        <div id="primaryTags"></div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <h6 class="text-success">次要兴趣</h6>
+                                        <div id="secondaryTags"></div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <h6 class="text-warning">新兴兴趣</h6>
+                                        <div id="emergingTags"></div>
+                                    </div>
+                                </div>
+                                <hr>
+                                <h6>标签权重分布</h6>
+                                <div id="tagWeights"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 偏好趋势 -->
+            <div class="tab-pane fade" id="trends" role="tabpanel">
+                <div class="row mt-4">
+                    <div class="col-12">
+                        <div class="trend-chart">
+                            <h5><i class="bi bi-graph-up-arrow"></i> 偏好趋势分析</h5>
+                            <canvas id="trendChart" width="800" height="400"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mt-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6><i class="bi bi-trending-up"></i> 趋势指标</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-6">
+                                        <h4 id="trendDirection" class="text-primary">-</h4>
+                                        <small>趋势方向</small>
+                                    </div>
+                                    <div class="col-6">
+                                        <h4 id="stabilityScore" class="text-success">-</h4>
+                                        <small>稳定性得分</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6 mt-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6><i class="bi bi-crystal-ball"></i> 趋势预测</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="trendPrediction"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 脚本 -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        let interestChart = null;
+        let trendChart = null;
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            loadUserProfile();
+            loadFollowSuggestions();
+            loadInterestTags();
+            loadPreferenceTrends();
+        });
+
+        // 加载用户画像
+        async function loadUserProfile() {
+            try {
+                document.getElementById('profileLoading').style.display = 'block';
+                document.getElementById('profileContent').style.display = 'none';
+
+                const response = await fetch('/api/user-profile/profile');
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayUserProfile(data);
+                    displayInterestChart(data);
+                } else {
+                    throw new Error(data.detail || '获取用户画像失败');
+                }
+            } catch (error) {
+                console.error('加载用户画像失败:', error);
+                showError('加载用户画像失败: ' + error.message);
+            } finally {
+                document.getElementById('profileLoading').style.display = 'none';
+                document.getElementById('profileContent').style.display = 'block';
+            }
+        }
+
+        // 显示用户画像
+        function displayUserProfile(data) {
+            document.getElementById('totalFollowing').textContent = data.total_following;
+            
+            const activityBadge = document.getElementById('activityLevel');
+            activityBadge.textContent = data.activity_level;
+            activityBadge.className = `activity-badge badge ${
+                data.activity_level === '高度活跃' ? 'bg-success' :
+                data.activity_level === '中度活跃' ? 'bg-primary' :
+                data.activity_level === '轻度活跃' ? 'bg-warning' : 'bg-secondary'
+            }`;
+
+            // 显示画像标签
+            const tagsContainer = document.getElementById('profileTags');
+            tagsContainer.innerHTML = data.profile_tags.map(tag => 
+                `<span class="interest-tag">${tag}</span>`
+            ).join('');
+        }
+
+        // 显示兴趣分布图表
+        function displayInterestChart(data) {
+            const ctx = document.getElementById('interestChart').getContext('2d');
+            
+            if (interestChart) {
+                interestChart.destroy();
+            }
+
+            const categories = Object.keys(data.category_distribution);
+            const counts = Object.values(data.category_distribution);
+            const colors = generateColors(categories.length);
+
+            interestChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: categories,
+                    datasets: [{
+                        data: counts,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // 显示兴趣排行
+            const topInterestsContainer = document.getElementById('topInterests');
+            topInterestsContainer.innerHTML = data.top_interests.map((interest, index) => `
+                <div class="category-progress">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="fw-bold">${interest.category}</span>
+                        <span class="badge bg-primary">${interest.percentage}%</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" 
+                             style="width: ${interest.percentage}%; background-color: ${colors[index]};"
+                             aria-valuenow="${interest.percentage}" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                    </div>
+                    <small class="text-muted">${interest.count} 个关注</small>
+                </div>
+            `).join('');
+        }
+
+        // 加载关注建议
+        async function loadFollowSuggestions() {
+            try {
+                const response = await fetch('/api/user-profile/suggestions');
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayFollowSuggestions(data);
+                } else {
+                    throw new Error(data.detail || '获取关注建议失败');
+                }
+            } catch (error) {
+                console.error('加载关注建议失败:', error);
+            }
+        }
+
+        // 显示关注建议
+        function displayFollowSuggestions(data) {
+            // 显示多样性得分
+            document.getElementById('diversityScore').textContent = data.diversity_score;
+            
+            // 显示类别建议
+            const categorySuggestions = document.getElementById('categorySuggestions');
+            categorySuggestions.innerHTML = data.suggested_categories.map(suggestion => `
+                <div class="suggestion-card card mb-2">
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-8">
+                                <h6 class="card-title mb-1">${suggestion.category}</h6>
+                                <p class="card-text small text-muted mb-0">
+                                    当前: ${suggestion.current_percentage}% → 建议: ${suggestion.suggested_percentage}%
+                                </p>
+                            </div>
+                            <div class="col-md-4 text-end">
+                                <span class="badge ${
+                                    suggestion.priority === 'high' ? 'bg-danger' : 'bg-warning'
+                                }">
+                                    ${suggestion.priority === 'high' ? '高优先级' : '中优先级'}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // 显示用户推荐
+            const userRecommendations = document.getElementById('userRecommendations');
+            userRecommendations.innerHTML = data.recommended_users.map(user => `
+                <div class="suggestion-card card mb-2">
+                    <div class="card-body">
+                        <h6 class="card-title">${user.name}</h6>
+                        <p class="card-text small">${user.reason}</p>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="badge bg-info">${user.category}</span>
+                            <small class="text-muted">置信度: ${Math.round(user.confidence * 100)}%</small>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // 显示建议原因
+            document.getElementById('suggestionReason').textContent = data.suggestion_reason;
+        }
+
+        // 加载兴趣标签
+        async function loadInterestTags() {
+            try {
+                const response = await fetch('/api/user-profile/interest-tags');
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayInterestTags(data);
+                } else {
+                    throw new Error(data.detail || '获取兴趣标签失败');
+                }
+            } catch (error) {
+                console.error('加载兴趣标签失败:', error);
+            }
+        }
+
+        // 显示兴趣标签
+        function displayInterestTags(data) {
+            // 主要兴趣
+            const primaryTags = document.getElementById('primaryTags');
+            primaryTags.innerHTML = data.primary_tags.map(tag => 
+                `<span class="badge bg-primary me-1 mb-1">${tag}</span>`
+            ).join('');
+
+            // 次要兴趣
+            const secondaryTags = document.getElementById('secondaryTags');
+            secondaryTags.innerHTML = data.secondary_tags.map(tag => 
+                `<span class="badge bg-success me-1 mb-1">${tag}</span>`
+            ).join('');
+
+            // 新兴兴趣
+            const emergingTags = document.getElementById('emergingTags');
+            emergingTags.innerHTML = data.emerging_tags.map(tag => 
+                `<span class="badge bg-warning me-1 mb-1">${tag}</span>`
+            ).join('');
+
+            // 标签权重
+            const tagWeights = document.getElementById('tagWeights');
+            const sortedWeights = Object.entries(data.tag_weights)
+                .sort(([,a], [,b]) => b - a)
+                .slice(0, 8);
+            
+            tagWeights.innerHTML = sortedWeights.map(([tag, weight]) => `
+                <div class="category-progress">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span>${tag}</span>
+                        <span class="text-muted">${Math.round(weight * 100)}%</span>
+                    </div>
+                    <div class="progress">
+                        <div class="progress-bar bg-info" role="progressbar" 
+                             style="width: ${weight * 100}%"
+                             aria-valuenow="${weight * 100}" aria-valuemin="0" aria-valuemax="100">
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // 加载偏好趋势
+        async function loadPreferenceTrends() {
+            try {
+                const response = await fetch('/api/user-profile/preference-trends');
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayPreferenceTrends(data);
+                } else {
+                    throw new Error(data.detail || '获取偏好趋势失败');
+                }
+            } catch (error) {
+                console.error('加载偏好趋势失败:', error);
+            }
+        }
+
+        // 显示偏好趋势
+        function displayPreferenceTrends(data) {
+            // 显示趋势图表
+            const ctx = document.getElementById('trendChart').getContext('2d');
+            
+            if (trendChart) {
+                trendChart.destroy();
+            }
+
+            const dates = data.trend_data.map(item => item.date);
+            const diversityScores = data.trend_data.map(item => item.diversity_score);
+            const newFollows = data.trend_data.map(item => item.new_follows);
+
+            trendChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: dates,
+                    datasets: [
+                        {
+                            label: '多样性得分',
+                            data: diversityScores,
+                            borderColor: '#667eea',
+                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                            tension: 0.4,
+                            yAxisID: 'y'
+                        },
+                        {
+                            label: '新增关注',
+                            data: newFollows,
+                            borderColor: '#ff6b6b',
+                            backgroundColor: 'rgba(255, 107, 107, 0.1)',
+                            tension: 0.4,
+                            yAxisID: 'y1'
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    scales: {
+                        x: {
+                            display: true,
+                            title: {
+                                display: true,
+                                text: '日期'
+                            }
+                        },
+                        y: {
+                            type: 'linear',
+                            display: true,
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: '多样性得分'
+                            }
+                        },
+                        y1: {
+                            type: 'linear',
+                            display: true,
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: '新增关注数'
+                            },
+                            grid: {
+                                drawOnChartArea: false,
+                            },
+                        }
+                    }
+                }
+            });
+
+            // 显示趋势指标
+            document.getElementById('trendDirection').textContent = data.trend_direction;
+            document.getElementById('stabilityScore').textContent = data.stability_score;
+
+            // 显示预测
+            const predictionContainer = document.getElementById('trendPrediction');
+            if (data.prediction.message) {
+                predictionContainer.innerHTML = `<p class="text-muted">${data.prediction.message}</p>`;
+            } else {
+                predictionContainer.innerHTML = `
+                    <p><strong>下周预测多样性:</strong> ${data.prediction.next_week_diversity}</p>
+                    <p><strong>置信度:</strong> ${Math.round(data.prediction.confidence * 100)}%</p>
+                    <p><strong>建议:</strong> ${data.prediction.recommendation}</p>
+                `;
+            }
+        }
+
+        // 刷新所有数据
+        function refreshAllData() {
+            loadUserProfile();
+            loadFollowSuggestions();
+            loadInterestTags();
+            loadPreferenceTrends();
+        }
+
+        // 生成颜色
+        function generateColors(count) {
+            const colors = [
+                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0',
+                '#9966FF', '#FF9F40', '#FF6384', '#C9CBCF',
+                '#4BC0C0', '#FF6384', '#36A2EB', '#FFCE56'
+            ];
+            return colors.slice(0, count);
+        }
+
+        // 显示错误信息
+        function showError(message) {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = 'alert alert-danger alert-dismissible fade show';
+            alertDiv.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.container').insertBefore(alertDiv, document.querySelector('.container').firstChild);
+        }
+    </script>
+</body>
+</html>

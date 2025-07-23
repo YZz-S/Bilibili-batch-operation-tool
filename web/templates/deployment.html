@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>一键部署 - Bilibili批量操作工具</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .deployment-card {
+            transition: all 0.3s ease;
+        }
+        .deployment-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        }
+        .progress-bar {
+            transition: width 0.5s ease;
+        }
+        .log-container {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .pulse-animation {
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- 导航栏 -->
+    <nav class="bg-white shadow-sm border-b">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-rocket text-blue-600 text-2xl mr-3"></i>
+                    <h1 class="text-xl font-semibold text-gray-900">一键部署</h1>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/" class="text-gray-600 hover:text-gray-900 transition-colors">
+                        <i class="fas fa-home mr-2"></i>首页
+                    </a>
+                    <a href="/user-profile" class="text-gray-600 hover:text-gray-900 transition-colors">
+                        <i class="fas fa-user mr-2"></i>用户画像
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- 页面标题 -->
+        <div class="text-center mb-8">
+            <h2 class="text-3xl font-bold text-gray-900 mb-4">应用一键部署</h2>
+            <p class="text-lg text-gray-600">选择部署平台，一键完成应用部署</p>
+        </div>
+
+        <!-- 部署状态卡片 -->
+        <div id="deploymentStatus" class="bg-white rounded-lg shadow-md p-6 mb-8 hidden">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold text-gray-900">部署状态</h3>
+                <button id="stopDeployment" class="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded-lg transition-colors hidden">
+                    <i class="fas fa-stop mr-2"></i>停止部署
+                </button>
+            </div>
+            
+            <!-- 进度条 -->
+            <div class="mb-4">
+                <div class="flex justify-between text-sm text-gray-600 mb-2">
+                    <span id="statusMessage">准备中...</span>
+                    <span id="progressText">0%</span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-2">
+                    <div id="progressBar" class="bg-blue-600 h-2 rounded-full progress-bar" style="width: 0%"></div>
+                </div>
+            </div>
+            
+            <!-- 部署信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                <div class="text-center">
+                    <div class="text-sm text-gray-500">开始时间</div>
+                    <div id="startTime" class="font-medium">-</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-sm text-gray-500">持续时间</div>
+                    <div id="duration" class="font-medium">-</div>
+                </div>
+                <div class="text-center">
+                    <div class="text-sm text-gray-500">状态</div>
+                    <div id="deploymentStatusText" class="font-medium">
+                        <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                            <i class="fas fa-clock mr-1"></i>等待中
+                        </span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 日志输出 -->
+            <div class="border-t pt-4">
+                <h4 class="text-sm font-medium text-gray-900 mb-2">部署日志</h4>
+                <div id="deploymentLogs" class="log-container bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm">
+                    <div class="text-gray-500">等待部署开始...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 部署平台选择 -->
+        <div id="platformSelection" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- 本地部署 -->
+            <div class="deployment-card bg-white rounded-lg shadow-md p-6 cursor-pointer border-2 border-transparent hover:border-blue-500" data-platform="local">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-desktop text-blue-600 text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">本地部署</h3>
+                    <p class="text-gray-600 text-sm mb-4">在本地环境中部署应用</p>
+                    <div class="text-xs text-gray-500">
+                        <div class="mb-1"><i class="fas fa-clock mr-1"></i>预计时间: 2分钟</div>
+                        <div><i class="fas fa-check mr-1"></i>需要: Python 3.8+</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Docker部署 -->
+            <div class="deployment-card bg-white rounded-lg shadow-md p-6 cursor-pointer border-2 border-transparent hover:border-blue-500" data-platform="docker">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fab fa-docker text-blue-600 text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Docker部署</h3>
+                    <p class="text-gray-600 text-sm mb-4">使用Docker容器部署应用</p>
+                    <div class="text-xs text-gray-500">
+                        <div class="mb-1"><i class="fas fa-clock mr-1"></i>预计时间: 5分钟</div>
+                        <div><i class="fas fa-check mr-1"></i>需要: Docker</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vercel部署 -->
+            <div class="deployment-card bg-white rounded-lg shadow-md p-6 cursor-pointer border-2 border-transparent hover:border-blue-500" data-platform="vercel">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-black rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-cloud text-white text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Vercel部署</h3>
+                    <p class="text-gray-600 text-sm mb-4">部署到Vercel云平台</p>
+                    <div class="text-xs text-gray-500">
+                        <div class="mb-1"><i class="fas fa-clock mr-1"></i>预计时间: 3分钟</div>
+                        <div><i class="fas fa-check mr-1"></i>需要: Vercel CLI</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Heroku部署 -->
+            <div class="deployment-card bg-white rounded-lg shadow-md p-6 cursor-pointer border-2 border-transparent hover:border-blue-500" data-platform="heroku">
+                <div class="text-center">
+                    <div class="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-server text-purple-600 text-2xl"></i>
+                    </div>
+                    <h3 class="text-lg font-semibold text-gray-900 mb-2">Heroku部署</h3>
+                    <p class="text-gray-600 text-sm mb-4">部署到Heroku云平台</p>
+                    <div class="text-xs text-gray-500">
+                        <div class="mb-1"><i class="fas fa-clock mr-1"></i>预计时间: 4分钟</div>
+                        <div><i class="fas fa-check mr-1"></i>需要: Heroku CLI</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 配置选项 -->
+        <div id="configOptions" class="bg-white rounded-lg shadow-md p-6 mb-8 hidden">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">部署配置</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 环境选择 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">部署环境</label>
+                    <select id="environment" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="production">生产环境</option>
+                        <option value="development">开发环境</option>
+                    </select>
+                </div>
+                
+                <!-- 服务器端口 -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">服务器端口</label>
+                    <input type="number" id="serverPort" value="8080" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+            </div>
+            
+            <!-- 高级配置 -->
+            <div class="mt-6">
+                <button id="toggleAdvanced" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+                    <i class="fas fa-cog mr-2"></i>高级配置
+                </button>
+                
+                <div id="advancedConfig" class="mt-4 hidden">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">数据库路径</label>
+                            <input type="text" id="dbPath" value="data/bilibili.db" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">API延迟(秒)</label>
+                            <input type="number" id="apiDelay" value="1.0" step="0.1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">重试次数</label>
+                            <input type="number" id="retryTimes" value="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">请求超时(秒)</label>
+                            <input type="number" id="timeout" value="30" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 部署按钮 -->
+            <div class="mt-6 flex justify-end space-x-4">
+                <button id="cancelDeployment" class="px-6 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors">
+                    取消
+                </button>
+                <button id="startDeployment" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-rocket mr-2"></i>开始部署
+                </button>
+            </div>
+        </div>
+
+        <!-- 部署历史 -->
+        <div class="bg-white rounded-lg shadow-md p-6">
+            <h3 class="text-lg font-semibold text-gray-900 mb-4">部署说明</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                    <h4 class="font-medium text-gray-900 mb-2">部署前准备</h4>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li><i class="fas fa-check text-green-500 mr-2"></i>确保已安装相应的部署工具</li>
+                        <li><i class="fas fa-check text-green-500 mr-2"></i>检查网络连接状态</li>
+                        <li><i class="fas fa-check text-green-500 mr-2"></i>备份重要数据</li>
+                        <li><i class="fas fa-check text-green-500 mr-2"></i>配置必要的环境变量</li>
+                    </ul>
+                </div>
+                
+                <div>
+                    <h4 class="font-medium text-gray-900 mb-2">注意事项</h4>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li><i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>部署过程中请勿关闭浏览器</li>
+                        <li><i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>确保有足够的磁盘空间</li>
+                        <li><i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>云平台部署需要相应账号权限</li>
+                        <li><i class="fas fa-exclamation-triangle text-yellow-500 mr-2"></i>首次部署可能需要更长时间</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedPlatform = null;
+        let deploymentInterval = null;
+        let isDeploying = false;
+
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeEventListeners();
+            loadSupportedPlatforms();
+        });
+
+        function initializeEventListeners() {
+            // 平台选择
+            document.querySelectorAll('.deployment-card').forEach(card => {
+                card.addEventListener('click', function() {
+                    selectPlatform(this.dataset.platform);
+                });
+            });
+
+            // 高级配置切换
+            document.getElementById('toggleAdvanced').addEventListener('click', function() {
+                const advancedConfig = document.getElementById('advancedConfig');
+                advancedConfig.classList.toggle('hidden');
+                this.innerHTML = advancedConfig.classList.contains('hidden') 
+                    ? '<i class="fas fa-cog mr-2"></i>高级配置'
+                    : '<i class="fas fa-cog mr-2"></i>隐藏高级配置';
+            });
+
+            // 部署控制按钮
+            document.getElementById('startDeployment').addEventListener('click', startDeployment);
+            document.getElementById('cancelDeployment').addEventListener('click', cancelDeployment);
+            document.getElementById('stopDeployment').addEventListener('click', stopDeployment);
+        }
+
+        function selectPlatform(platform) {
+            // 移除之前的选择
+            document.querySelectorAll('.deployment-card').forEach(card => {
+                card.classList.remove('border-blue-500', 'bg-blue-50');
+            });
+
+            // 选择新平台
+            const selectedCard = document.querySelector(`[data-platform="${platform}"]`);
+            selectedCard.classList.add('border-blue-500', 'bg-blue-50');
+            
+            selectedPlatform = platform;
+            
+            // 显示配置选项
+            document.getElementById('configOptions').classList.remove('hidden');
+        }
+
+        function cancelDeployment() {
+            selectedPlatform = null;
+            document.getElementById('configOptions').classList.add('hidden');
+            document.querySelectorAll('.deployment-card').forEach(card => {
+                card.classList.remove('border-blue-500', 'bg-blue-50');
+            });
+        }
+
+        async function startDeployment() {
+            if (!selectedPlatform) {
+                alert('请先选择部署平台');
+                return;
+            }
+
+            if (isDeploying) {
+                alert('部署正在进行中，请等待完成');
+                return;
+            }
+
+            try {
+                isDeploying = true;
+                
+                // 收集配置
+                const config = {
+                    target_platform: selectedPlatform,
+                    environment: document.getElementById('environment').value,
+                    config_overrides: {
+                        'server.port': parseInt(document.getElementById('serverPort').value),
+                        'database.path': document.getElementById('dbPath').value,
+                        'bilibili.api_delay': parseFloat(document.getElementById('apiDelay').value),
+                        'bilibili.retry_times': parseInt(document.getElementById('retryTimes').value),
+                        'bilibili.timeout': parseInt(document.getElementById('timeout').value)
+                    }
+                };
+
+                // 发起部署请求
+                const response = await fetch('/api/deployment/deploy', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(config)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`部署启动失败: ${response.statusText}`);
+                }
+
+                const result = await response.json();
+                
+                // 显示部署状态
+                showDeploymentStatus();
+                
+                // 开始监控部署进度
+                startDeploymentMonitoring();
+                
+            } catch (error) {
+                console.error('部署启动失败:', error);
+                alert(`部署启动失败: ${error.message}`);
+                isDeploying = false;
+            }
+        }
+
+        function showDeploymentStatus() {
+            document.getElementById('deploymentStatus').classList.remove('hidden');
+            document.getElementById('platformSelection').style.opacity = '0.5';
+            document.getElementById('configOptions').style.opacity = '0.5';
+            document.getElementById('stopDeployment').classList.remove('hidden');
+        }
+
+        function hideDeploymentStatus() {
+            document.getElementById('deploymentStatus').classList.add('hidden');
+            document.getElementById('platformSelection').style.opacity = '1';
+            document.getElementById('configOptions').style.opacity = '1';
+            document.getElementById('stopDeployment').classList.add('hidden');
+        }
+
+        function startDeploymentMonitoring() {
+            deploymentInterval = setInterval(async () => {
+                try {
+                    const response = await fetch('/api/deployment/status');
+                    if (!response.ok) {
+                        throw new Error('获取部署状态失败');
+                    }
+                    
+                    const status = await response.json();
+                    updateDeploymentStatus(status);
+                    
+                    // 如果部署完成，停止监控
+                    if (status.status === 'success' || status.status === 'failed') {
+                        clearInterval(deploymentInterval);
+                        isDeploying = false;
+                    }
+                    
+                } catch (error) {
+                    console.error('获取部署状态失败:', error);
+                }
+            }, 2000);
+        }
+
+        function updateDeploymentStatus(status) {
+            // 更新进度条
+            document.getElementById('progressBar').style.width = `${status.progress}%`;
+            document.getElementById('progressText').textContent = `${status.progress}%`;
+            document.getElementById('statusMessage').textContent = status.message;
+            
+            // 更新状态标签
+            const statusElement = document.getElementById('deploymentStatusText');
+            let statusClass, statusIcon, statusText;
+            
+            switch (status.status) {
+                case 'deploying':
+                    statusClass = 'bg-blue-100 text-blue-800';
+                    statusIcon = 'fas fa-spinner fa-spin';
+                    statusText = '部署中';
+                    break;
+                case 'success':
+                    statusClass = 'bg-green-100 text-green-800';
+                    statusIcon = 'fas fa-check';
+                    statusText = '成功';
+                    break;
+                case 'failed':
+                    statusClass = 'bg-red-100 text-red-800';
+                    statusIcon = 'fas fa-times';
+                    statusText = '失败';
+                    break;
+                default:
+                    statusClass = 'bg-gray-100 text-gray-800';
+                    statusIcon = 'fas fa-clock';
+                    statusText = '等待中';
+            }
+            
+            statusElement.innerHTML = `
+                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusClass}">
+                    <i class="${statusIcon} mr-1"></i>${statusText}
+                </span>
+            `;
+            
+            // 更新时间信息
+            if (status.start_time) {
+                const startTime = new Date(status.start_time);
+                document.getElementById('startTime').textContent = startTime.toLocaleTimeString();
+            }
+            
+            if (status.duration) {
+                const minutes = Math.floor(status.duration / 60);
+                const seconds = status.duration % 60;
+                document.getElementById('duration').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+            }
+            
+            // 更新日志
+            const logsContainer = document.getElementById('deploymentLogs');
+            if (status.logs && status.logs.length > 0) {
+                logsContainer.innerHTML = status.logs.map(log => 
+                    `<div class="log-entry">${escapeHtml(log)}</div>`
+                ).join('');
+                logsContainer.scrollTop = logsContainer.scrollHeight;
+            }
+        }
+
+        async function stopDeployment() {
+            try {
+                const response = await fetch('/api/deployment/stop', {
+                    method: 'POST'
+                });
+                
+                if (!response.ok) {
+                    throw new Error('停止部署失败');
+                }
+                
+                clearInterval(deploymentInterval);
+                isDeploying = false;
+                hideDeploymentStatus();
+                
+            } catch (error) {
+                console.error('停止部署失败:', error);
+                alert(`停止部署失败: ${error.message}`);
+            }
+        }
+
+        async function loadSupportedPlatforms() {
+            try {
+                const response = await fetch('/api/deployment/platforms');
+                if (!response.ok) {
+                    throw new Error('获取支持的平台失败');
+                }
+                
+                const data = await response.json();
+                // 这里可以根据API返回的平台信息动态更新UI
+                console.log('支持的部署平台:', data.platforms);
+                
+            } catch (error) {
+                console.error('获取支持的平台失败:', error);
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // 页面卸载时清理
+        window.addEventListener('beforeunload', function() {
+            if (deploymentInterval) {
+                clearInterval(deploymentInterval);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -28,6 +28,8 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).parent))
 
 from src.api import bilibili_router, data_router, analysis_router
+from src.api.user_profile import router as user_profile_router
+from src.api.deployment import router as deployment_router
 from src.core.config import get_config
 from src.core.logger import setup_logger
 from src.database.manager import DatabaseManager
@@ -95,6 +97,8 @@ templates = Jinja2Templates(directory="web/templates")
 app.include_router(bilibili_router, prefix="/api/bilibili", tags=["哔哩哔哩API"])
 app.include_router(data_router, prefix="/api/data", tags=["数据管理"])
 app.include_router(analysis_router, prefix="/api/analysis", tags=["数据分析"])
+app.include_router(user_profile_router, prefix="/api/user-profile", tags=["用户画像"])
+app.include_router(deployment_router, prefix="/api/deployment", tags=["一键部署"])
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -137,10 +141,32 @@ async def user_stats_page(request: Request):
     return response
 
 
+@app.get("/user-profile", response_class=HTMLResponse)
+async def user_profile_page(request: Request):
+    """用户画像页面"""
+    response = templates.TemplateResponse("user-profile.html", {"request": request})
+    # 禁用缓存，确保前端总是获取最新版本
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     """设置页面"""
     return templates.TemplateResponse("settings.html", {"request": request})
+
+
+@app.get("/deployment", response_class=HTMLResponse)
+async def deployment_page(request: Request):
+    """一键部署页面"""
+    response = templates.TemplateResponse("deployment.html", {"request": request})
+    # 禁用缓存，确保前端总是获取最新版本
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
 
 
 @app.exception_handler(HTTPException)
@@ -208,4 +234,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main() 
+    main()
