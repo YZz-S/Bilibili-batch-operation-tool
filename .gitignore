@@ -65,5 +65,4 @@ Thumbs.db
 data/*.csv
 data/*.json
 data/cache/ 
-__init__.py
 data/bilibili.db-journal
