@@ -1,3 +1,5 @@
+
+
 # 哔哩哔哩关注列表批量管理工具
 
 一个功能强大的哔哩哔哩关注列表管理工具，支持批量操作、数据可视化和智能分类。
@@ -115,7 +117,7 @@
 
 1. **克隆项目**
    ```bash
-   git clone https://github.com/your-username/Bilibili-batch-operation-tool.git
+   git clone https://github.com/YZz-S/Bilibili-batch-operation-tool.git
    cd Bilibili-batch-operation-tool
    ```
 
@@ -127,7 +129,7 @@
 3. **配置Cookie**
    - 登录哔哩哔哩网页版
    - 获取Cookie信息
-   - 在 `config/config.json` 中配置
+   - 复制 `config/config.example.json` 为 `config/config.json` 并填入您的 Cookie
 
 4. **启动应用**
    ```bash
@@ -159,7 +161,7 @@
 {
   "bilibili": {
     "cookie": "你的Cookie信息",
-    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+    "user_agent": "Mozilla/5.0 (Windows NT 1.0. Win64; x64) AppleWebKit/537.36"
   },
   "database": {
     "path": "data/bilibili.db"
@@ -790,4 +792,4 @@ POST /api/bilibili/one-click-update-optimized
 - `src/bilibili/optimized_api.py` - 优化API接口
 - `performance_config.json` - 性能配置文件
 
-这些优化策略已在生产环境中验证，可以在保证数据完整性的前提下显著提升同步效率。 
+这些优化策略已在生产环境中验证，可以在保证数据完整性的前提下显著提升同步效率。
